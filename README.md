@@ -5,5 +5,5 @@
 To test running ECLIPSE on the KLEE Getting Started example program, run the following:
 
 ```
-python3 /workspace/src/main.py /workspace/examples/klee-getting-started/preprocessed-input.c
+python3 src/main.py examples/klee-getting-started/preprocessed-input.c
 ```

@@ -44,6 +44,7 @@ def run_klee(bitcode_file: str, original_input_file: str) -> None:
     # Run the KLEE process using the bitcode file and the output directory.
     subprocess.run([
         "klee",
+        "--only-output-states-covering-new",
         f"-output-dir={str(output_directory)}",
         bitcode_file,
     ], check=True)

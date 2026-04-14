@@ -6,4 +6,7 @@ To test running ECLIPSE on the KLEE Getting Started example program, run the fol
 
 ```
 python3 src/main.py examples/initial-klee-docs-tests/klee-getting-started-example/preprocessed-input.c
+
+python3 src/main.py examples/tests/loops.c
+
 ```

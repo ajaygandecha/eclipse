@@ -72,7 +72,7 @@ if __name__ == "__main__":
     preprocess_file(input_path)
 
     # Compile the input file into a LLVM bitcode file.
-    compiled_input_file = compile_input(input_path)
+    # compiled_input_file = compile_input(input_path)
 
     # Run the LLVM bitcode file using KLEE.
-    output_directory = run_klee(compiled_input_file, input_file)
+    # output_directory = run_klee(compiled_input_file, input_file)

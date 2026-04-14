@@ -1,6 +1,7 @@
 import sys
 from pycparser import parse_file, c_generator
 from pycparser.c_ast import FileAST
+from loop_bounds import add_loop_bounds
 
 
 def preprocess_file(file_path: str) -> str:
@@ -24,11 +25,6 @@ def constrain_structured_arguments(ast: FileAST) -> FileAST:
 
 
 def constrain_gpio_reads(ast: FileAST) -> FileAST:
-    ...
-    return ast
-
-
-def add_loop_bounds(ast: FileAST) -> FileAST:
     ...
     return ast
 

@@ -58,3 +58,8 @@ RUN locale-gen en_US.UTF-8
 # Default back to the non-root KLEE user for development
 USER klee
 WORKDIR /workspace
+
+# Install Database Dependencies
+COPY requirements.txt /workspace/requirements.txt
+WORKDIR /workspace
+RUN python3 -m pip install -r requirements.txt

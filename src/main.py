@@ -2,6 +2,8 @@ import sys
 import subprocess
 from pathlib import Path
 from datetime import datetime
+from preprocessor import preprocess_file
+
 
 def compile_input(input_path: Path) -> str:
     """Compiles the input file using clang into a LLVM bitcode file"""
@@ -14,23 +16,27 @@ def compile_input(input_path: Path) -> str:
     # Run the clang process using the input path as the source file and
     # the correct settings to compile an input C file into LLVM bitcode
     # that can be used by KLEE.
-    subprocess.run([
-        "clang",
-        "-I",
-        "/usr/include",
-        "-emit-llvm",
-        "-c",
-        "-g",
-        "-O0",
-        "-Xclang",
-        "-disable-O0-optnone",
-        str(input_path),
-        "-o",
-        str(compiled_output_path),
-    ], check=True)
+    subprocess.run(
+        [
+            "clang",
+            "-I",
+            "/usr/include",
+            "-emit-llvm",
+            "-c",
+            "-g",
+            "-O0",
+            "-Xclang",
+            "-disable-O0-optnone",
+            str(input_path),
+            "-o",
+            str(compiled_output_path),
+        ],
+        check=True,
+    )
 
     # Return the path to the compiled output file.
     return str(compiled_output_path)
+
 
 def run_klee(bitcode_file: str, original_input_file: str) -> None:
     """Symbolically executes the LLVM bitcode file using KLEE"""
@@ -39,22 +45,31 @@ def run_klee(bitcode_file: str, original_input_file: str) -> None:
 
     # Create a base output directory for the KLEE output.
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    output_directory = Path(original_input_file).resolve().parent / f"klee-output-{timestamp}"
+    output_directory = (
+        Path(original_input_file).resolve().parent / f"klee-output-{timestamp}"
+    )
 
     # Run the KLEE process using the bitcode file and the output directory.
-    subprocess.run([
-        "klee",
-        "--only-output-states-covering-new",
-        f"-output-dir={str(output_directory)}",
-        bitcode_file,
-    ], check=True)
+    subprocess.run(
+        [
+            "klee",
+            "--only-output-states-covering-new",
+            f"-output-dir={str(output_directory)}",
+            bitcode_file,
+        ],
+        check=True,
+    )
 
     return str(output_directory)
-    
+
+
 if __name__ == "__main__":
     input_file = sys.argv[1]
 
     input_path = Path(input_file).resolve()
+
+    # Preprocess the input file.
+    preprocess_file(input_path)
 
     # Compile the input file into a LLVM bitcode file.
     compiled_input_file = compile_input(input_path)

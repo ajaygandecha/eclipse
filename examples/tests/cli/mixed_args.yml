@@ -1,0 +1,16 @@
+program: tool
+options:
+  pin:
+    flag: --pin
+    type: int
+    required: true
+    min: 1
+    max: 26
+  mode:
+    flag: --mode
+    type: string
+    required: true
+    max_length: 7
+  verbose:
+    flag: --verbose
+    type: bool

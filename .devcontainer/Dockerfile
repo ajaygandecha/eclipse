@@ -21,21 +21,35 @@ RUN rm -f /etc/apt/sources.list.d/kitware*.list /etc/apt/sources.list.d/archive_
     && apt-get update \
     && apt-get install --yes \
         apt-transport-https \
+        autoconf \
+        automake \
+        autopoint \
+        bison \
         build-essential \
         ca-certificates \
         curl \
         debian-keyring \
         debian-archive-keyring \
+        gettext \
         git \
         gnupg \
+        gperf \
+        gzip \
+        help2man \
         locales \
+        m4 \
+        make \
+        perl \
         python3 \
         python3-venv \
         python3-pip \
         software-properties-common \
         sudo \
+        tar \
+        texinfo \
         tzdata \
         wget \
+        xz-utils \
         zsh \
     && rm -rf /var/lib/apt/lists/*
 

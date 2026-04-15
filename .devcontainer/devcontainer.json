@@ -3,7 +3,7 @@
   "workspaceFolder": "/workspace",
   "service": "eclipse-dev",
   "remoteUser": "klee",
-  "postCreateCommand": "python3 -m pip install --user pre-commit commitizen && python3 -m pre_commit install --hook-type commit-msg",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
       "extensions": [

@@ -1,1 +1,3 @@
 pycparser >=3.0
+PyYAML >=6.0
+wllvm >=1.3.1

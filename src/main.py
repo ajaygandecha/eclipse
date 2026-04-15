@@ -1,3 +1,11 @@
+"""Compile C inputs to LLVM bitcode and run them under KLEE.
+
+Most inputs can be compiled as a single translation unit with clang. Coreutils
+is the main exception: utilities such as `cut` depend on a large set of
+generated headers and support libraries, so KLEE must be given linked,
+whole-program bitcode instead of a single `cut.c` object file.
+"""
+
 import argparse
 import os
 import subprocess
@@ -10,6 +18,9 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _COREUTILS_ROOT = _REPO_ROOT / "examples" / "coreutils"
 _FAKE_LIBC_INCLUDE = _REPO_ROOT / "src" / "utils" / "fake_libc_include"
 _COREUTILS_CONFIG_STAMP = _COREUTILS_ROOT / ".eclipse-devcontainer-configured"
+# These flags mirror the KLEE Coreutils tutorial: keep debug info, avoid
+# optimization passes that erase useful structure, and disable a few host
+# optimizations that get in the way of symbolic execution.
 _COREUTILS_KLEE_CFLAGS = (
     "-g -O1 -Xclang -disable-llvm-passes "
     "-D__NO_STRING_INLINES -D_FORTIFY_SOURCE=0 -U__OPTIMIZE__"
@@ -59,6 +70,7 @@ def _coreutils_input_relative_path(input_path: Path) -> Path:
 
 
 def _coreutils_program_target(input_path: Path) -> str:
+    """Map `examples/coreutils/src/foo.c` to the make target `src/foo`."""
     relative_input_path = _coreutils_input_relative_path(input_path)
     if relative_input_path.parent != Path("src"):
         raise RuntimeError(
@@ -70,6 +82,12 @@ def _coreutils_program_target(input_path: Path) -> str:
 
 
 def _coreutils_built_sources(build_root: Path, env: dict[str, str]) -> list[str]:
+    """Ask make for the fully expanded Coreutils BUILT_SOURCES list.
+
+    Coreutils generates many wrapper headers such as `configmake.h`,
+    `lib/stdio.h`, and `lib/wctype.h`. Building them up front avoids the
+    missing-generated-header errors we saw when jumping straight to `make src/cut`.
+    """
     built_sources_result = subprocess.run(
         [
             "make",
@@ -100,6 +118,11 @@ def _coreutils_built_sources(build_root: Path, env: dict[str, str]) -> list[str]
 
 
 def _coreutils_klee_env() -> dict[str, str]:
+    """Return the toolchain environment required for whole-program Coreutils BC.
+
+    `wllvm` records the LLVM bitcode for each compiled object, and `extract-bc`
+    later recovers linked whole-program bitcode from the final executable.
+    """
     wllvm_binary = _resolve_tool_binary("wllvm")
     if not wllvm_binary:
         raise RuntimeError(
@@ -122,6 +145,7 @@ def _coreutils_klee_env() -> dict[str, str]:
 
 
 def _prepare_coreutils_source_tree(input_path: Path) -> tuple[Path, dict[str, str]]:
+    """Validate that the devcontainer-prepared Coreutils tree is ready to use."""
     build_root = _COREUTILS_ROOT
     env = _coreutils_klee_env()
 
@@ -136,6 +160,12 @@ def _prepare_coreutils_source_tree(input_path: Path) -> tuple[Path, dict[str, st
 
 
 def _build_coreutils_bitcode(input_path: Path, compiled_output_path: Path) -> str:
+    """Build linked whole-program bitcode for a Coreutils utility.
+
+    This follows the KLEE Coreutils workflow more closely than the normal clang
+    path: generate Coreutils' built headers, build the linked utility with
+    `wllvm`, then extract a `.bc` file from the final executable.
+    """
     build_root, env = _prepare_coreutils_source_tree(input_path)
     program_target = _coreutils_program_target(input_path)
     extract_bc_binary = _resolve_tool_binary("extract-bc")
@@ -148,6 +178,9 @@ def _build_coreutils_bitcode(input_path: Path, compiled_output_path: Path) -> st
     print("Building linked Coreutils bitcode with wllvm...", flush=True)
     built_sources = _coreutils_built_sources(build_root, env)
     if built_sources:
+        # Coreutils' generated compatibility headers are prerequisites for
+        # source files like `src/cut.c`, but make does not always materialize
+        # them early enough when we request only `src/cut`.
         subprocess.run(
             ["make", "-j1", *built_sources],
             cwd=build_root,
@@ -177,7 +210,12 @@ def _build_coreutils_bitcode(input_path: Path, compiled_output_path: Path) -> st
 
 
 def compile_input(input_path: Path) -> str:
-    """Compiles the input file using clang into a LLVM bitcode file"""
+    """Compile the input file into LLVM bitcode for KLEE.
+
+    Ordinary inputs use a direct clang invocation. Coreutils inputs use a
+    separate whole-program flow because KLEE needs the linked utility plus its
+    generated gnulib/Coreutils support code.
+    """
 
     # Create a path for the compiled output file.
     compiled_output_path = input_path.parent / "compiled-input.bc"
@@ -234,7 +272,7 @@ def compile_input(input_path: Path) -> str:
 
 
 def run_klee(bitcode_file: str, original_input_file: str) -> str | None:
-    """Symbolically executes the LLVM bitcode file using KLEE"""
+    """Symbolically execute the LLVM bitcode file using KLEE."""
 
     print(f"Running {bitcode_file} using klee...", flush=True)
 
@@ -257,6 +295,8 @@ def run_klee(bitcode_file: str, original_input_file: str) -> str | None:
     ]
 
     if _is_coreutils_input(Path(original_input_file)):
+        # Whole-program Coreutils bitcode expects KLEE's POSIX runtime and
+        # klee-uclibc, matching the upstream Coreutils tutorial.
         klee_command.extend(["--libc=uclibc", "--posix-runtime"])
 
     klee_command.append(bitcode_file)

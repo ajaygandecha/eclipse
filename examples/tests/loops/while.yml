@@ -1,0 +1,6 @@
+program: while
+entry_point: main
+
+args:
+  argv0: "while"
+  elements:

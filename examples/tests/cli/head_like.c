@@ -23,18 +23,22 @@ int parse_int(char *value) {
     return result;
 }
 
-int helper(int pin) {
-    return pin + 1;
-}
-
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        return 1;
+    int index = 1;
+    int count = -1;
+
+    if (index < argc &&
+        (same_flag(argv[index], "-n") || same_flag(argv[index], "--lines"))) {
+        if (index + 1 >= argc) {
+            return 2;
+        }
+        count = parse_int(argv[index + 1]);
+        index += 2;
     }
 
-    if (!same_flag(argv[1], "--pin")) {
-        return 2;
+    if (index < argc) {
+        return (count == 7) && (argv[index][0] == 'f');
     }
 
-    return helper(parse_int(argv[2]));
+    return count == 7;
 }

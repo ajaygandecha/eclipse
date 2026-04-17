@@ -314,16 +314,21 @@ def run_klee(bitcode_file: str, original_input_file: str) -> str | None:
     return str(output_directory)
 
 
+def processed_output_path(input_path: Path) -> Path:
+    """Return the emitted post-preprocessing C path for an input source file."""
+
+    return input_path.with_name(f"{input_path.stem}-processed.c")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Preprocess a C file for ECLIPSE symbolic execution."
     )
     parser.add_argument("input_file", help="Path to the input C program.")
-    # parser.add_argument(
-    #     "--cli-config",
-    #     required=True,
-    #     help="Path to the YAML config describing CLI flags and symbolic constraints.",
-    # )
+    parser.add_argument(
+        "--cli-config",
+        help="Path to the canonical YAML config describing structured CLI inputs.",
+    )
     return parser.parse_args()
 
 
@@ -331,16 +336,26 @@ if __name__ == "__main__":
     args = parse_args()
 
     input_path = Path(args.input_file).resolve()
+    compile_input_path = input_path
 
-    # Preprocess the input file.
-    # from preprocessor import preprocess_file
-    # preprocessed_code = preprocess_file(input_path)
-    # preprocessed_code = preprocess_file(input_path, args.cli_config)
-    # print(preprocessed_code)
+    if args.cli_config:
+        if _is_coreutils_input(input_path):
+            raise RuntimeError(
+                "Structured CLI harness generation currently supports standalone "
+                "C inputs only; coreutils still use the whole-program KLEE flow."
+            )
+
+        from preprocessor import preprocess_file
+
+        cli_config_path = Path(args.cli_config).resolve()
+        preprocessed_code = preprocess_file(str(input_path), str(cli_config_path))
+        compile_input_path = processed_output_path(input_path)
+        compile_input_path.write_text(preprocessed_code)
+        print(f"Wrote preprocessed harness to {compile_input_path}", flush=True)
 
     # Compile the input file into a LLVM bitcode file.
-    compiled_input_file = compile_input(input_path)
-    print("Compiled.", flush=True)
+    # compiled_input_file = compile_input(compile_input_path)
+    # print("Compiled.", flush=True)
 
     # Run the LLVM bitcode file using KLEE.
-    output_directory = run_klee(compiled_input_file, input_path)
+    # output_directory = run_klee(compiled_input_file, input_path)

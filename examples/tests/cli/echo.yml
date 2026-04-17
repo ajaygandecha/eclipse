@@ -1,0 +1,22 @@
+program: echo
+entry_point: main
+
+args:
+  argv0: "echo"
+  elements:
+    - id: no_newline
+      type: option
+      optional: true
+      spellings: ["-n"]
+
+    - id: msg1
+      type: positional
+      optional: true
+      min_length: 0
+      max_length: 4
+
+    - id: msg2
+      type: positional
+      optional: true
+      min_length: 0
+      max_length: 4

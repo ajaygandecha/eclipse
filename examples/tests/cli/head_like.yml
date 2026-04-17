@@ -1,0 +1,24 @@
+program: head_like
+entry_point: main
+
+args:
+  argv0: "head-like"
+  elements:
+    - id: count_flag
+      type: option
+      optional: true
+      spellings: ["-n", "--lines"]
+
+    - id: count_value
+      type: option_value
+      parent: count_flag
+      optional: false
+      value_kind: int
+      min: 0
+      max: 32
+
+    - id: file
+      type: positional
+      optional: true
+      min_length: 0
+      max_length: 8

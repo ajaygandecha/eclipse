@@ -1,3 +1,4 @@
 *klee-output-*
 *.bc
 .eclipse-cache/
+__pycache__

@@ -22,6 +22,7 @@ class CLIConfigTests(unittest.TestCase):
 
         self.assertEqual(spec.program, "echo")
         self.assertEqual(spec.entry_point, "main")
+        self.assertIsNone(spec.klee_posix_command)
         self.assertEqual(spec.argv0, "echo")
         self.assertEqual(len(spec.elements), 3)
         self.assertIsInstance(spec.elements[0], OptionElement)
@@ -203,6 +204,24 @@ class HarnessGenerationTests(unittest.TestCase):
 
         self.assertIsInstance(spec.elements[1], OptionValueElement)
 
+    def test_coreutils_config_loads_optional_klee_posix_command(self) -> None:
+        spec = load_cli_config(REPO_ROOT / "examples/coreutils/src/echo.yml")
+
+        self.assertEqual(spec.klee_posix_command, "--sym-args 0 2 4")
+
+    def test_rejects_sys_args_typo_in_klee_posix_command(self) -> None:
+        invalid_yaml = """
+        program: echo
+        entry_point: main
+        klee_posix_command: "--sys-args 0 2 4"
+        args:
+          argv0: "echo"
+          elements: []
+        """
+
+        with self.assertRaisesRegex(ValueError, "--sym-args"):
+            self._load_yaml_string(invalid_yaml)
+
     def test_no_arg_main_is_wrapped_without_argv_harness(self) -> None:
         generated = preprocess_file(
             str(REPO_ROOT / "examples/tests/loops/while.c"),
@@ -212,6 +231,12 @@ class HarnessGenerationTests(unittest.TestCase):
         self.assertIn("int __eclipse_original_main()", generated)
         self.assertIn("return __eclipse_original_main();", generated)
         self.assertNotIn("__eclipse_argv", generated)
+
+    def _load_yaml_string(self, yaml_text: str):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            yaml_path = Path(temp_dir) / "config.yml"
+            yaml_path.write_text(textwrap.dedent(yaml_text).strip() + "\n")
+            return load_cli_config(yaml_path)
 
 
 if __name__ == "__main__":

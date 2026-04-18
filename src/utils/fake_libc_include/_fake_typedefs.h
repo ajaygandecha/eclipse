@@ -59,6 +59,7 @@ typedef int daddr_t;
 typedef int caddr_t;
 typedef int ino_t;
 typedef int off_t;
+typedef int off64_t;
 typedef int dev_t;
 typedef int uid_t;
 typedef int gid_t;

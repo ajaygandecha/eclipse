@@ -38,11 +38,12 @@ CLIElementSpec = OptionElement | PositionalElement | OptionValueElement
 class CLIProgramSpec:
     program: str
     entry_point: str
+    klee_posix_command: str | None
     argv0: str
     elements: tuple[CLIElementSpec, ...]
 
 
-_TOP_LEVEL_KEYS = {"program", "entry_point", "args"}
+_TOP_LEVEL_KEYS = {"program", "entry_point", "klee_posix_command", "args"}
 _ARGS_KEYS = {"argv0", "elements"}
 _LEGACY_KEYS = {"options", "positionals"}
 
@@ -64,6 +65,10 @@ def load_cli_config(config_path: str | Path) -> CLIProgramSpec:
     )
     if entry_point != "main":
         raise ValueError("CLI config entry_point must be 'main' in V1.")
+    klee_posix_command = _load_optional_string(
+        raw_config.get("klee_posix_command"),
+        "klee_posix_command",
+    )
 
     raw_args = raw_config.get("args")
     if not isinstance(raw_args, dict):
@@ -85,6 +90,7 @@ def load_cli_config(config_path: str | Path) -> CLIProgramSpec:
     spec = CLIProgramSpec(
         program=program,
         entry_point=entry_point,
+        klee_posix_command=klee_posix_command,
         argv0=argv0,
         elements=elements,
     )
@@ -265,6 +271,19 @@ def _load_spellings(raw_spellings: object, element_id: str) -> tuple[str, ...]:
 def _require_non_empty_string(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"CLI config must define a non-empty '{field_name}'.")
+    return value
+
+
+def _load_optional_string(value: object, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"CLI config '{field_name}' must be a non-empty string.")
+    if field_name == "klee_posix_command" and "--sys-args" in value:
+        raise ValueError(
+            "CLI config 'klee_posix_command' uses '--sys-args', but KLEE's POSIX "
+            "runtime option is '--sym-args'."
+        )
     return value
 
 

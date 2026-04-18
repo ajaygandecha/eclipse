@@ -434,3 +434,9 @@ def add_argument_constraints(ast: FileAST, config_path: str) -> FileAST:
     """Generate a symbolic CLI harness around the program's main function."""
 
     return ArgumentConstraintVisitor(load_cli_config(config_path)).visit(ast)
+
+
+def build_cli_harness_source(spec: CLIProgramSpec, uses_argv: bool) -> str:
+    """Render the standalone harness main source for a validated CLI spec."""
+
+    return HarnessSourceBuilder(spec, uses_argv).build()

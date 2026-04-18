@@ -1,6 +1,7 @@
 import subprocess
 import shutil
 import shlex
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -9,6 +10,8 @@ def run_klee(
     bitcode_file: str,
     original_input_file: str,
     klee_posix_command: str | None = None,
+    guided_search: bool = False,
+    guidance_file: str | None = None,
 ) -> str | None:
     """
     Symbolically executes the LLVM bitcode file using KLEE.
@@ -37,9 +40,11 @@ def run_klee(
         bitcode_file,
         output_directory,
         klee_posix_command=klee_posix_command,
+        guided_search=guided_search,
     )
 
-    result = subprocess.run(klee_command, check=False)
+    klee_environment = _build_klee_environment(guidance_file)
+    result = subprocess.run(klee_command, check=False, env=klee_environment)
 
     if result.returncode != 0:
         print(
@@ -57,6 +62,7 @@ def _build_klee_command(
     bitcode_file: str,
     output_directory: Path,
     klee_posix_command: str | None = None,
+    guided_search: bool = False,
 ) -> list[str]:
     """Build the KLEE command, appending POSIX-runtime args after the bitcode."""
 
@@ -66,13 +72,34 @@ def _build_klee_command(
         f"-output-dir={str(output_directory)}",
         "--libc=uclibc",
         "--posix-runtime",
-        bitcode_file,
+        "-exit-on-error-type=Ptr",
+        "-exit-on-error-type=Free",
+        "-exit-on-error-type=ReadOnly",
     ]
+
+    if guided_search:
+        klee_command.extend(
+            [
+                "--search=guided",
+                "--search=nurs:covnew",
+            ]
+        )
+
+    klee_command.append(bitcode_file)
 
     if klee_posix_command:
         klee_command.extend(shlex.split(klee_posix_command))
 
     return klee_command
+
+
+def _build_klee_environment(guidance_file: str | None = None) -> dict[str, str]:
+    environment = os.environ.copy()
+    if guidance_file:
+        environment["ECLIPSE_GUIDANCE_FILE"] = guidance_file
+    else:
+        environment.pop("ECLIPSE_GUIDANCE_FILE", None)
+    return environment
 
 
 def _resolve_klee_binary() -> str | None:

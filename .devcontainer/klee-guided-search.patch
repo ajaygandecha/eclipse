@@ -1,0 +1,296 @@
+diff -ruN a/lib/Core/CMakeLists.txt b/lib/Core/CMakeLists.txt
+--- a/lib/Core/CMakeLists.txt	2026-04-18 10:49:04
++++ b/lib/Core/CMakeLists.txt	2026-04-18 10:49:04
+@@ -13,6 +13,7 @@
+   Context.cpp
+   CoreStats.cpp
+   ExecutionState.cpp
++  GuidedSearcher.cpp
+   Executor.cpp
+   ExecutorUtil.cpp
+   ExternalDispatcher.cpp
+diff -ruN a/lib/Core/GuidedSearcher.cpp b/lib/Core/GuidedSearcher.cpp
+--- a/lib/Core/GuidedSearcher.cpp	1969-12-31 19:00:00
++++ b/lib/Core/GuidedSearcher.cpp	2026-04-18 10:49:04
+@@ -0,0 +1,79 @@
++//===-- GuidedSearcher.cpp ------------------------------------------------===//
++//
++//                     The KLEE Symbolic Virtual Machine
++//
++// This file is distributed under the University of Illinois Open Source
++// License. See LICENSE.TXT for details.
++//
++//===----------------------------------------------------------------------===//
++
++#include "GuidedSearcher.h"
++#include "klee/Module/KInstruction.h"
++#include "llvm/IR/Function.h"
++#include "llvm/IR/Instruction.h"
++
++#include <algorithm>
++#include <cassert>
++#include <utility>
++
++using namespace klee;
++
++GuidedSearcher::GuidedSearcher(std::unordered_set<std::string> riskyFunctions)
++    : riskyFunctions(std::move(riskyFunctions)) {}
++
++bool GuidedSearcher::isRiskyState(const ExecutionState &state) const {
++  auto *inst = state.pc->inst;
++  if (!inst)
++    return false;
++
++  auto *function = inst->getFunction();
++  if (!function)
++    return false;
++
++  return riskyFunctions.find(function->getName().str()) != riskyFunctions.end();
++}
++
++ExecutionState &GuidedSearcher::selectState() {
++  assert(!states.empty() && "GuidedSearcher has no states");
++
++  const std::size_t startIndex = nextIndex % states.size();
++
++  for (std::size_t offset = 0; offset < states.size(); ++offset) {
++    const std::size_t index = (startIndex + offset) % states.size();
++    if (isRiskyState(*states[index])) {
++      nextIndex = (index + 1) % states.size();
++      return *states[index];
++    }
++  }
++
++  nextIndex = (startIndex + 1) % states.size();
++  return *states[startIndex];
++}
++
++void GuidedSearcher::update(ExecutionState *current,
++                            const std::vector<ExecutionState *> &addedStates,
++                            const std::vector<ExecutionState *> &removedStates) {
++  states.insert(states.end(), addedStates.begin(), addedStates.end());
++
++  for (const auto *state : removedStates) {
++    auto it = std::find(states.begin(), states.end(), state);
++    assert(it != states.end() && "invalid state removed");
++    const std::size_t removedIndex = std::distance(states.begin(), it);
++    states.erase(it);
++
++    if (nextIndex > removedIndex && nextIndex != 0)
++      --nextIndex;
++  }
++
++  if (states.empty()) {
++    nextIndex = 0;
++  } else if (nextIndex >= states.size()) {
++    nextIndex = 0;
++  }
++}
++
++bool GuidedSearcher::empty() { return states.empty(); }
++
++void GuidedSearcher::printName(llvm::raw_ostream &os) {
++  os << "GuidedSearcher\n";
++}
+diff -ruN a/lib/Core/GuidedSearcher.h b/lib/Core/GuidedSearcher.h
+--- a/lib/Core/GuidedSearcher.h	1969-12-31 19:00:00
++++ b/lib/Core/GuidedSearcher.h	2026-04-18 10:49:04
+@@ -0,0 +1,42 @@
++//===-- GuidedSearcher.h --------------------------------------*- C++ -*-===//
++//
++//                     The KLEE Symbolic Virtual Machine
++//
++// This file is distributed under the University of Illinois Open Source
++// License. See LICENSE.TXT for details.
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef KLEE_GUIDEDSEARCHER_H
++#define KLEE_GUIDEDSEARCHER_H
++
++#include "Searcher.h"
++
++#include <cstddef>
++#include <string>
++#include <unordered_set>
++#include <vector>
++
++namespace klee {
++
++class GuidedSearcher final : public Searcher {
++  std::vector<ExecutionState *> states;
++  std::unordered_set<std::string> riskyFunctions;
++  std::size_t nextIndex = 0;
++
++public:
++  explicit GuidedSearcher(std::unordered_set<std::string> riskyFunctions);
++
++  ExecutionState &selectState() override;
++  void update(ExecutionState *current,
++              const std::vector<ExecutionState *> &addedStates,
++              const std::vector<ExecutionState *> &removedStates) override;
++  bool empty() override;
++  void printName(llvm::raw_ostream &os) override;
++
++private:
++  bool isRiskyState(const ExecutionState &state) const;
++};
++
++} // namespace klee
++#endif
+diff -ruN a/lib/Core/Searcher.h b/lib/Core/Searcher.h
+--- a/lib/Core/Searcher.h	2026-04-18 10:49:04
++++ b/lib/Core/Searcher.h	2026-04-18 10:49:04
+@@ -65,6 +65,7 @@
+       BFS,
+       RandomState,
+       RandomPath,
++      Guided,
+       NURS_CovNew,
+       NURS_MD2U,
+       NURS_Depth,
+diff -ruN a/lib/Core/UserSearcher.cpp b/lib/Core/UserSearcher.cpp
+--- a/lib/Core/UserSearcher.cpp	2026-04-18 10:49:04
++++ b/lib/Core/UserSearcher.cpp	2026-04-18 10:49:04
+@@ -8,15 +8,26 @@
+ //===----------------------------------------------------------------------===//
+ 
+ #include "UserSearcher.h"
++#include "GuidedSearcher.h"
+ 
+ #include "Executor.h"
+ #include "MergeHandler.h"
+ #include "Searcher.h"
+ 
+ #include "klee/Support/ErrorHandling.h"
++#include "llvm/Support/Error.h"
++#include "llvm/Support/JSON.h"
++#include "llvm/Support/MemoryBuffer.h"
++#include "llvm/ADT/SmallString.h"
++#include "llvm/ADT/StringRef.h"
++#include "llvm/IR/Module.h"
++#include "llvm/Support/Path.h"
+ 
+ #include "llvm/Support/CommandLine.h"
+ 
++#include <cstdlib>
++#include <unordered_set>
++
+ using namespace llvm;
+ using namespace klee;
+ 
+@@ -37,6 +48,7 @@
+                    "randomly select a state to explore"),
+         clEnumValN(Searcher::RandomPath, "random-path",
+                    "use Random Path Selection (see OSDI'08 paper)"),
++        clEnumValN(Searcher::Guided, "guided", "use ECLIPSE guided search"),
+         clEnumValN(Searcher::NURS_CovNew, "nurs:covnew",
+                    "use Non Uniform Random Search (NURS) with Coverage-New"),
+         clEnumValN(Searcher::NURS_MD2U, "nurs:md2u",
+@@ -102,14 +114,71 @@
+           std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::NURS_QC) != CoreSearch.end());
+ }
+ 
++namespace {
+ 
+-Searcher *getNewSearcher(Searcher::CoreSearchType type, RNG &rng, PTree &processTree) {
++bool usesGuidedSearch() {
++  return std::find(CoreSearch.begin(), CoreSearch.end(), Searcher::Guided) != CoreSearch.end();
++}
++
++std::string resolveGuidancePath(const std::string &defaultGuidancePath) {
++  if (const char *path = std::getenv("ECLIPSE_GUIDANCE_FILE")) {
++    if (*path)
++      return std::string(path);
++  }
++  return defaultGuidancePath;
++}
++
++std::unordered_set<std::string> loadGuidedFunctions(const std::string &guidancePath) {
++  auto guidanceFile = MemoryBuffer::getFile(guidancePath);
++  if (!guidanceFile) {
++    klee_error("unable to read guidance file '%s': %s", guidancePath.c_str(),
++               guidanceFile.getError().message().c_str());
++  }
++
++  auto parsedJSON = json::parse((*guidanceFile)->getBuffer());
++  if (!parsedJSON) {
++    klee_error("unable to parse guidance file '%s': %s", guidancePath.c_str(),
++               toString(parsedJSON.takeError()).c_str());
++  }
++
++  auto *guidanceObject = parsedJSON->getAsObject();
++  if (!guidanceObject)
++    klee_error("guidance file '%s' must contain a top-level JSON object",
++               guidancePath.c_str());
++
++  auto *riskyFunctions = guidanceObject->getArray("risky_functions");
++  if (!riskyFunctions)
++    klee_error("guidance file '%s' is missing a 'risky_functions' array",
++               guidancePath.c_str());
++
++  std::unordered_set<std::string> loadedFunctions;
++  for (const auto &entry : *riskyFunctions) {
++    auto functionName = entry.getAsString();
++    if (!functionName) {
++      klee_error("guidance file '%s' contains a non-string risky function entry",
++                 guidancePath.c_str());
++    }
++    loadedFunctions.insert(functionName->str());
++  }
++
++  return loadedFunctions;
++}
++
++} // namespace
++
++
++Searcher *getNewSearcher(Searcher::CoreSearchType type, RNG &rng, PTree &processTree,
++                         const std::unordered_set<std::string> *guidedFunctions) {
+   Searcher *searcher = nullptr;
+   switch (type) {
+     case Searcher::DFS: searcher = new DFSSearcher(); break;
+     case Searcher::BFS: searcher = new BFSSearcher(); break;
+     case Searcher::RandomState: searcher = new RandomSearcher(rng); break;
+     case Searcher::RandomPath: searcher = new RandomPathSearcher(processTree, rng); break;
++    case Searcher::Guided:
++      assert(guidedFunctions && "guided search requested without loaded guidance");
++      searcher = new GuidedSearcher(*guidedFunctions);
++      break;
+     case Searcher::NURS_CovNew: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::CoveringNew, rng); break;
+     case Searcher::NURS_MD2U: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::MinDistToUncovered, rng); break;
+     case Searcher::NURS_Depth: searcher = new WeightedRandomSearcher(WeightedRandomSearcher::Depth, rng); break;
+@@ -123,15 +192,31 @@
+ }
+ 
+ Searcher *klee::constructUserSearcher(Executor &executor) {
++  std::unordered_set<std::string> guidedFunctions;
++  const std::unordered_set<std::string> *guidedFunctionsPtr = nullptr;
++  if (usesGuidedSearch()) {
++    SmallString<256> guidancePath(
++        executor.kmodule->module->getModuleIdentifier());
++    if (guidancePath.empty())
++      klee_error("guided search could not derive a module path for guidance loading");
++    sys::path::replace_extension(guidancePath, "");
++    constexpr StringRef ProcessedSuffix("-processed");
++    if (StringRef(guidancePath).endswith(ProcessedSuffix))
++      guidancePath.resize(guidancePath.size() - ProcessedSuffix.size());
++    guidancePath += "-guidance.json";
++    guidedFunctions = loadGuidedFunctions(
++        resolveGuidancePath(std::string(guidancePath.str())));
++    guidedFunctionsPtr = &guidedFunctions;
++  }
+ 
+-  Searcher *searcher = getNewSearcher(CoreSearch[0], executor.theRNG, *executor.processTree);
++  Searcher *searcher = getNewSearcher(CoreSearch[0], executor.theRNG, *executor.processTree, guidedFunctionsPtr);
+ 
+   if (CoreSearch.size() > 1) {
+     std::vector<Searcher *> s;
+     s.push_back(searcher);
+ 
+     for (unsigned i = 1; i < CoreSearch.size(); i++)
+-      s.push_back(getNewSearcher(CoreSearch[i], executor.theRNG, *executor.processTree));
++      s.push_back(getNewSearcher(CoreSearch[i], executor.theRNG, *executor.processTree, guidedFunctionsPtr));
+ 
+     searcher = new InterleavedSearcher(s);
+   }

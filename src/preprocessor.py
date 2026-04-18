@@ -6,6 +6,7 @@ from pycparser.c_ast import FileAST, FuncDef
 from argument_constraints import ORIGINAL_MAIN_NAME, build_cli_harness_source
 from cli_config import load_cli_config
 from gpio_constraints import add_gpio_constraints
+from guided_se import find_risky_functions, write_guidance_file
 from loop_bounds import add_loop_bounds
 
 KLEE_PREAMBLE = """extern int snprintf(char *str, unsigned long size, const char *format, ...);
@@ -54,8 +55,6 @@ _CPP_ARGS = (
     "-D__builtin_choose_expr(c,x,y)=(y)",
     "-D__inline=inline",
 )
-
-
 def _build_cpp_args(file_path: str | Path) -> list[str]:
     source_path = Path(file_path).resolve()
     cpp_args = list(_CPP_ARGS)
@@ -78,17 +77,24 @@ def preprocess_file(
     no_gpio_constraints: bool = False,
     no_cli_constraints: bool = False,
     no_guided_se: bool = False,
+    guidance_output_path: str | Path | None = None,
 ) -> str:
     """Preprocesses the input file using the pycparser library"""
-    if cli_config_path and not no_cli_constraints and _is_coreutils_input(file_path):
-        return _build_coreutils_cli_wrapper(file_path, cli_config_path)
-
     ast = parse_file(
         str(Path(file_path).resolve()),
         use_cpp=True,
         cpp_path="clang",
         cpp_args=_build_cpp_args(file_path),
     )
+    guidance = None
+    if not no_guided_se:
+        guidance = find_risky_functions(ast)
+        if guidance_output_path:
+            write_guidance_file(guidance_output_path, guidance)
+
+    if cli_config_path and not no_cli_constraints and _is_coreutils_input(file_path):
+        return _build_coreutils_cli_wrapper(file_path, cli_config_path)
+
     if cli_config_path and not no_cli_constraints:
         from argument_constraints import add_argument_constraints
 
@@ -97,7 +103,6 @@ def preprocess_file(
         ast = constrain_gpio_reads(ast)
     if not no_loop_bounds:
         ast = add_loop_bounds(ast)
-    find_risky_functions(ast)
 
     if _is_coreutils_input(file_path):
         return _render_coreutils_processed_source(file_path, ast)
@@ -116,11 +121,6 @@ def constrain_structured_arguments(ast: FileAST, cli_config_path: str) -> FileAS
 
 def constrain_gpio_reads(ast: FileAST) -> FileAST:
     return add_gpio_constraints(ast)
-
-
-def find_risky_functions(ast: FileAST):
-    ...
-    # Create risky JSON
 
 
 def _is_coreutils_input(file_path: str | Path) -> bool:

@@ -5,6 +5,8 @@ set -euo pipefail
 python3 -m pip install --user pre-commit commitizen
 python3 -m pre_commit install --hook-type commit-msg
 
+bash /workspace/.devcontainer/apply-guided-klee.sh
+
 COREUTILS_DIR="/workspace/examples/coreutils"
 CONFIG_STAMP="$COREUTILS_DIR/.eclipse-devcontainer-configured"
 CONFIG_CC_MARKER="$COREUTILS_DIR/.eclipse-devcontainer-coreutils-cc"

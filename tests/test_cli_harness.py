@@ -42,6 +42,18 @@ class CLIConfigTests(unittest.TestCase):
         self.assertIsInstance(option, OptionElement)
         self.assertEqual(option.spellings, ("-n", "--lines"))
 
+    def test_loads_guided_sensor_probe_yaml(self) -> None:
+        spec = load_cli_config(REPO_ROOT / "examples/tests/guided/sensor_probe.yml")
+
+        self.assertEqual(spec.program, "sensor_probe")
+        self.assertEqual(spec.entry_point, "main")
+        self.assertEqual(spec.klee_posix_command, "--sym-args 0 4 2")
+        self.assertEqual(spec.argv0, "sensor-probe")
+        self.assertEqual(len(spec.elements), 4)
+        self.assertIsInstance(spec.elements[0], OptionElement)
+        self.assertIsInstance(spec.elements[2], OptionValueElement)
+        self.assertIsInstance(spec.elements[3], PositionalElement)
+
     def test_rejects_legacy_schema(self) -> None:
         legacy_yaml = """
         program: tool
@@ -195,6 +207,19 @@ class HarnessGenerationTests(unittest.TestCase):
             str(REPO_ROOT / "examples/tests/cli/head_like.c"),
             str(REPO_ROOT / "examples/tests/cli/head_like.yml"),
         )
+
+        parsed = c_parser.CParser().parse(generated)
+        self.assertIsNotNone(parsed)
+
+    def test_guided_example_generates_parseable_harness(self) -> None:
+        generated = preprocess_file(
+            str(REPO_ROOT / "examples/tests/guided/sensor_probe.c"),
+            str(REPO_ROOT / "examples/tests/guided/sensor_probe.yml"),
+        )
+
+        self.assertIn("int __eclipse_sample_flag_spelling;", generated)
+        self.assertIn("char sym_payload[3];", generated)
+        self.assertIn('__eclipse_argv[0] = "sensor-probe";', generated)
 
         parsed = c_parser.CParser().parse(generated)
         self.assertIsNotNone(parsed)

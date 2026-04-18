@@ -37,6 +37,12 @@ def processed_output_path(input_path: Path) -> Path:
     return input_path.with_name(f"{input_path.stem}-processed.c")
 
 
+def guidance_output_path(input_path: Path) -> Path:
+    """Return the emitted guided-search metadata path for a source artifact."""
+
+    return input_path.with_name(f"{input_path.stem}-guidance.json")
+
+
 def _format_elapsed_duration(seconds: float) -> str:
     """Render elapsed seconds as a small human-readable duration."""
 
@@ -106,6 +112,7 @@ if __name__ == "__main__":
 
     input_path = Path(args.input_file).resolve()
     compile_input_path = input_path
+    emitted_guidance_path = None
 
     if not args.cli_config:
         raise RuntimeError(
@@ -132,11 +139,17 @@ if __name__ == "__main__":
             args.no_cli_constraints if args.no_cli_constraints else False
         ),
         no_guided_se=args.no_guided_se if args.no_guided_se else False,
+        guidance_output_path=(
+            str(guidance_output_path(input_path)) if not args.no_guided_se else None
+        ),
     )
 
     compile_input_path = processed_output_path(input_path)
     compile_input_path.write_text(preprocessed_code)
     _print_status_ok(f"Pre-processing complete (wrote to {compile_input_path})")
+    if not args.no_guided_se:
+        emitted_guidance_path = guidance_output_path(input_path)
+        _print_status_ok(f"Guidance metadata emitted to {emitted_guidance_path}")
 
     # Compile the input file into a LLVM bitcode file.
     compiled_input_file = compile_input(compile_input_path)
@@ -156,6 +169,8 @@ if __name__ == "__main__":
         compiled_input_file,
         input_path,
         klee_posix_command=klee_posix_command,
+        guided_search=emitted_guidance_path is not None,
+        guidance_file=str(emitted_guidance_path) if emitted_guidance_path else None,
     )
     klee_elapsed = time.monotonic() - klee_started_at
     print(f"KLEE run time: {_format_elapsed_duration(klee_elapsed)}", flush=True)

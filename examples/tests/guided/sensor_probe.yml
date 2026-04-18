@@ -1,0 +1,30 @@
+program: sensor_probe
+entry_point: main
+klee_posix_command: "--sym-args 0 4 2"
+
+args:
+  argv0: "sensor-probe"
+  elements:
+    - id: diag_mode
+      type: option
+      optional: true
+      spellings: ["-D", "--diag"]
+
+    - id: sample_flag
+      type: option
+      optional: true
+      spellings: ["-s", "--samples"]
+
+    - id: sample_count
+      type: option_value
+      parent: sample_flag
+      optional: false
+      value_kind: int
+      min: 0
+      max: 2
+
+    - id: payload
+      type: positional
+      optional: true
+      min_length: 1
+      max_length: 2

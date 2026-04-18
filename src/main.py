@@ -30,6 +30,7 @@ def _guidance_output_path(input_path: Path) -> Path:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse the command line arguments for the ECLIPSE main program."""
     parser = argparse.ArgumentParser(
         description="Preprocess a C file for ECLIPSE symbolic execution."
     )
@@ -70,11 +71,12 @@ if __name__ == "__main__":
 
     if not args.cli_config:
         raise RuntimeError(
-            "A CLI config is required for structured CLI input processing."
+            "A CLI config file is required for structured CLI input processing."
         )
 
     cli_config_path = Path(args.cli_config).resolve()
 
+    # Preprocess the input file.
     preprocessed_code = preprocess_file(
         str(input_path),
         str(cli_config_path),
@@ -91,12 +93,15 @@ if __name__ == "__main__":
         ),
     )
 
+    # Write the preprocessed code to the output file.
     compile_input_path = _processed_output_path(input_path)
     compile_input_path.write_text(preprocessed_code)
 
     print_checkmarked_message(
         f"Pre-processing complete (wrote to {compile_input_path})"
     )
+
+    # If guided symbolic execution is enabled, emit the guidance metadata file.
     if not args.no_guided_se:
         emitted_guidance_path = _guidance_output_path(input_path)
         print_checkmarked_message(
@@ -105,24 +110,30 @@ if __name__ == "__main__":
 
     # Compile the input file into a LLVM bitcode file.
     compiled_input_file = compile_input(compile_input_path)
-    # print("Compiled.", flush=True)
 
     print_checkmarked_message("Compiled using clang")
 
     # Run the LLVM bitcode file using KLEE.
     print(f"Running {compiled_input_file} using klee...", flush=True)
 
-    klee_posix_command = None
-    if args.no_cli_constraints:
-        klee_posix_command = load_cli_config(cli_config_path).klee_posix_command
-
+    # Determine the time that symbolic execution started.
     klee_started_at = time.monotonic()
+
+    # Run KLEE with the compiled input file.
     output_directory = run_klee(
         compiled_input_file,
         input_path,
-        klee_posix_command=klee_posix_command,
+        klee_posix_command=(
+            load_cli_config(cli_config_path).klee_posix_command
+            if not args.no_cli_constraints
+            else None
+        ),
         guided_search=emitted_guidance_path is not None,
         guidance_file=str(emitted_guidance_path) if emitted_guidance_path else None,
     )
+
+    # Determine the time that symbolic execution finished.
     klee_elapsed = time.monotonic() - klee_started_at
+
+    # Print the time that symbolic execution took.
     print(f"KLEE run time: {format_time_duration(klee_elapsed)}", flush=True)

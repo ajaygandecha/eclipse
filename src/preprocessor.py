@@ -13,6 +13,8 @@ _COREUTILS_SRC = _REPO_ROOT / "examples" / "coreutils" / "src"
 _COREUTILS_GNULIB_LIB = _REPO_ROOT / "examples" / "coreutils" / "gnulib" / "lib"
 _COREUTILS_GL_LIB = _REPO_ROOT / "examples" / "coreutils" / "gl" / "lib"
 _FAKE_LIBC_INCLUDE = _REPO_ROOT / "src" / "utils" / "fake_libc_include"
+
+# Define the include paths that Clang will use to find the header files
 _CPP_INCLUDES = (
     _COREUTILS_LIB,
     _COREUTILS_SRC,
@@ -20,6 +22,10 @@ _CPP_INCLUDES = (
     _COREUTILS_GL_LIB,
     _FAKE_LIBC_INCLUDE,
 )
+
+# Define the necessary Clang preprocessing flags for the AST to be parsed correctly.
+# NOTE: Some of the flags added here are a response to running ECLIPSE on different
+# CoreUtils programs.
 _CPP_ARGS = (
     # Ask Clang to stop after preprocessing. `pycparser` expects plain C with
     # `#include`/`#define` already expanded instead of raw preprocessor syntax.
@@ -65,26 +71,35 @@ _CPP_ARGS = (
     "-D__builtin_choose_expr(c,x,y)=(y)",
     # Normalize GNU `__inline` to ordinary `inline` so the parser sees a more
     # standard spelling of the same keyword.
+    # NOTE: Necessary for CoreUtils' `echo` program.
     "-D__inline=inline",
 )
 
 
 def _build_cpp_args(file_path: str | Path) -> list[str]:
-    """Return the Clang preprocessing flags needed for a parseable translation unit.
-
-    The returned argument list combines our compatibility defines with the
-    source file's directory and the repository's vendored include roots. This
-    keeps preprocessing deterministic and steers `pycparser` away from host
-    system headers that often contain unsupported compiler extensions.
     """
+    Generates the arguments needed for the parser preprocessing step.
+
+    The returned argument list includes:
+    - Flags to make different C files parseable by pycparser.
+    - Next, we need to tell Clang where to find the header files that
+      are included in the source C file. This is done by adding -I flags
+      for each of the include paths.
+    """
+
+    source_path = Path(file_path).resolve()
 
     # Start with the compatibility flags above, then prepend the source file's
     # own directory and our vendored include trees so preprocessing sees the
     # same project headers regardless of which file we parse.
-    source_path = Path(file_path).resolve()
     cpp_args = list(_CPP_ARGS)
+
+    # We need to keep track of the paths we have already added to the argument list
+    # to avoid duplicates.
     seen_paths: set[Path] = set()
 
+    # Add the source file's own directory and our vendored include trees so
+    # preprocessing sees the same project headers regardless of which file we parse.
     for include_path in (source_path.parent, *_CPP_INCLUDES):
         resolved_path = include_path.resolve()
         # Skip missing/duplicate include roots so we hand Clang a clean,
@@ -106,32 +121,50 @@ def preprocess_file(
     no_guided_se: bool = False,
     guidance_output_path: str | Path | None = None,
 ) -> str:
-    """Apply all enabled AST preprocessing passes and render the result.
+    """
+    Apply all enabled AST preprocessing passes and render the result.
 
-    The file is first preprocessed with Clang into a `pycparser`-friendly AST.
-    Guided-search metadata, loop bounds, GPIO constraints, and CLI harnessing
-    are then applied in order before the final source-preserving renderer emits
-    the processed C translation unit.
+    First, the C file is parsed with pycparser into an AST. By default, pycparser
+    does not parse all C files correctly because it expects plain C with macros
+    (such as `#include` and `#define`) already expanded into standard C code. To
+    process the file correctly, `pycparser` uses Clang to preprocess the file into
+    a more parseable form with the option `use_cpp=True` and arguments for cpp.
+
+    From there, the AST is modified to add loop bounds, GPIO constraints, and CLI
+    constraints if they are enabled.
+
+    Finally, the AST is rendered back into a C file using a custom file that
+    preserves the original source text around the edited code. This is because
+    `pycparser`'s standard C generator does not preserve comments, includes,
+    macros, or other original code structural components that is necessary for
+    Clang to correctly compile the file.
     """
 
+    # Parse the input file into an AST.
     ast = parse_file(
         str(Path(file_path).resolve()),
         use_cpp=True,
         cpp_path="clang",
         cpp_args=_build_cpp_args(file_path),
     )
-    guidance = None
-    if not no_guided_se:
-        guidance = find_risky_functions(ast)
-        if guidance_output_path:
-            write_guidance_file(guidance_output_path, guidance)
 
+    # If guided symbolic execution is enabled, find the risky functions
+    # and write the guidance metadata file for the guided searcher.
+    if not no_guided_se and guidance_output_path:
+        guidance = find_risky_functions(ast)
+        write_guidance_file(guidance_output_path, guidance)
+
+    # If loop bounding is enabled, add loop bounds to the AST.
     if not no_loop_bounds:
         ast = add_loop_bounds(ast)
+
+    # If GPIO constraints are enabled, add GPIO constraints to the AST.
     if not no_gpio_constraints:
         ast = add_gpio_constraints(ast)
 
+    # If CLI constraints are enabled, add CLI constraints to the AST.
     if cli_config_path and not no_cli_constraints:
         ast = add_argument_constraints(ast, cli_config_path)
 
+    # Render the AST back into a C file.
     return render_processed_source(file_path, ast)

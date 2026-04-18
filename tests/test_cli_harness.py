@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from cli_config import OptionElement, OptionValueElement, PositionalElement, load_cli_config
-from main import processed_output_path
+from main import _processed_output_path
 import preprocessor
 from preprocessor import preprocess_file
 
@@ -146,7 +146,7 @@ class CLIConfigTests(unittest.TestCase):
 
 class HarnessGenerationTests(unittest.TestCase):
     def test_processed_output_path_uses_source_basename(self) -> None:
-        output_path = processed_output_path(
+        output_path = _processed_output_path(
             REPO_ROOT / "examples/tests/cli/head_like.c"
         )
 
@@ -259,7 +259,7 @@ class HarnessGenerationTests(unittest.TestCase):
         self.assertIn("return __eclipse_original_main();", generated)
         self.assertNotIn("__eclipse_argv", generated)
 
-    def test_coreutils_cli_wraps_processed_source_instead_of_original_include(self) -> None:
+    def test_cli_constraints_run_after_loop_and_gpio_before_render(self) -> None:
         ast = object()
         events: list[str] = []
 
@@ -270,39 +270,38 @@ class HarnessGenerationTests(unittest.TestCase):
         with (
             patch.object(preprocessor, "parse_file", return_value=ast),
             patch.object(preprocessor, "_build_cpp_args", return_value=[]),
-            patch.object(preprocessor, "_is_coreutils_input", return_value=True),
             patch.object(preprocessor, "add_loop_bounds", side_effect=lambda value: _record("loops")),
             patch.object(preprocessor, "constrain_gpio_reads", side_effect=lambda value: _record("gpio")),
             patch.object(
                 preprocessor,
-                "_render_coreutils_processed_source",
+                "add_argument_constraints",
                 side_effect=lambda file_path, value: (
-                    events.append("render"),
-                    "/* processed */\nint worker(void) { return __eclipse_loop_bound_0; }\n",
+                    events.append("cli"),
+                    ast,
                 )[1],
             ),
             patch.object(
                 preprocessor,
-                "build_cli_harness_for_ast",
+                "render_processed_source",
                 side_effect=lambda value, config_path: (
-                    events.append("cli"),
-                    "int main(void)\n{\n  return __eclipse_original_main(0, 0);\n}\n",
+                    events.append("render"),
+                    "/* processed */\nint __eclipse_original_main(void) { return 0; }\n"
+                    "int main(void)\n{\n  return __eclipse_original_main();\n}\n",
                 )[1],
             ),
         ):
             generated = preprocess_file(
-                str(REPO_ROOT / "examples/coreutils/src/echo.c"),
-                str(REPO_ROOT / "examples/coreutils/src/echo.yml"),
+                str(REPO_ROOT / "examples/tests/loops/while.c"),
+                str(REPO_ROOT / "examples/tests/loops/while.yml"),
                 no_guided_se=True,
             )
 
         self.assertLess(events.index("loops"), events.index("gpio"))
         self.assertLess(events.index("gpio"), events.index("cli"))
-        self.assertIn("#define main __eclipse_original_main", generated)
+        self.assertLess(events.index("cli"), events.index("render"))
         self.assertIn("/* processed */", generated)
-        self.assertIn("__eclipse_loop_bound_0", generated)
+        self.assertIn("__eclipse_original_main", generated)
         self.assertIn("int main(void)", generated)
-        self.assertNotIn("__ECLIPSE_COREUTILS_ORIGINAL_SOURCE__", generated)
 
     def _load_yaml_string(self, yaml_text: str):
         with tempfile.TemporaryDirectory() as temp_dir:

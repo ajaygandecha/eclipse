@@ -1,33 +1,17 @@
-from dataclasses import dataclass
 from pathlib import Path
 
-from pycparser import parse_file, c_generator
-from pycparser.c_ast import FileAST, FuncDef
-from argument_constraints import ORIGINAL_MAIN_NAME, build_cli_harness_for_ast
+from pycparser import parse_file
+from argument_constraints import add_argument_constraints
 from gpio_constraints import add_gpio_constraints
 from guided_se import find_risky_functions, write_guidance_file
 from loop_bounds import add_loop_bounds
-
-KLEE_PREAMBLE = """extern int snprintf(char *str, unsigned long size, const char *format, ...);
-extern void klee_make_symbolic(void *addr, unsigned long nbytes, const char *name);
-extern void klee_assume(int condition);
-extern void klee_assert(int condition);
-
-static char *__eclipse_int_to_string(int value, char *buffer, int buffer_size)
-{
-  snprintf(buffer, buffer_size, "%d", value);
-  return buffer;
-}
-
-"""
+from render import render_processed_source
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_COREUTILS_ROOT = _REPO_ROOT / "examples" / "coreutils"
 _COREUTILS_LIB = _REPO_ROOT / "examples" / "coreutils" / "lib"
 _COREUTILS_SRC = _REPO_ROOT / "examples" / "coreutils" / "src"
 _COREUTILS_GNULIB_LIB = _REPO_ROOT / "examples" / "coreutils" / "gnulib" / "lib"
 _COREUTILS_GL_LIB = _REPO_ROOT / "examples" / "coreutils" / "gl" / "lib"
-_COREUTILS_ORIGINAL_SOURCE_PLACEHOLDER = "__ECLIPSE_COREUTILS_ORIGINAL_SOURCE__"
 _FAKE_LIBC_INCLUDE = _REPO_ROOT / "src" / "utils" / "fake_libc_include"
 _CPP_INCLUDES = (
     _COREUTILS_LIB,
@@ -37,30 +21,74 @@ _CPP_INCLUDES = (
     _FAKE_LIBC_INCLUDE,
 )
 _CPP_ARGS = (
+    # Ask Clang to stop after preprocessing. `pycparser` expects plain C with
+    # `#include`/`#define` already expanded instead of raw preprocessor syntax.
     "-E",
+    # Avoid the host machine's real system headers. They often contain compiler-
+    # specific extensions that `pycparser` cannot understand, so we prefer our
+    # controlled include roots and fake libc headers below.
     "-nostdinc",
+    # Some of the compatibility defines below intentionally shadow builtin
+    # macros/functions, so suppress the resulting warning noise from Clang.
     "-Wno-builtin-macro-redefined",
+    # Gnulib/Coreutils use this guard around inline-heavy headers. Defining it
+    # keeps those headers on a simpler path during preprocessing.
     "-D_GL_NO_INLINE_ERROR",
+    # Drop GCC-style attributes such as `__attribute__((noreturn))`. They are
+    # useful to a real compiler but irrelevant to the AST rewrites we perform.
     "-D__attribute__(x)=",
+    # Remove GCC's `__extension__` marker, which only tells the compiler to
+    # accept a non-standard construct without warning.
     "-D__extension__=",
+    # Strip inline assembly annotations/aliases. `pycparser` cannot model them,
+    # and our source-to-source passes do not need them.
     "-D__asm__(x)=",
+    # Normalize compiler-specific spellings of `restrict` away. Those qualifiers
+    # matter for optimization, but not for loop/GPIO/CLI source rewriting.
     "-D__restrict=",
     "-D__restrict__=",
+    # Force feature-detection macros down the "attribute unsupported" path so
+    # headers do not emit syntax that depends on Clang/GCC extensions.
     "-D__has_attribute(x)=0",
     "-D__has_c_attribute(x)=0",
+    # Treat builtin-constant checks as false so headers choose simpler fallback
+    # code instead of compiler-only constant-folding branches.
     "-D__builtin_constant_p(x)=0",
+    # Remove branch prediction hints while keeping the original condition.
+    # `__builtin_expect(expr, hint)` becomes just `(expr)`.
     "-D__builtin_expect(x,y)=(x)",
+    # Disable type-introspection builtins that appear in system-style headers.
+    # We only need parseable C, not exact compiler metaprogramming behavior.
     "-D__builtin_types_compatible_p(x,y)=0",
+    # Replace Clang/GCC's compile-time choose-expression builtin with its
+    # fallback arm. This is a simplification, but it keeps headers parseable.
     "-D__builtin_choose_expr(c,x,y)=(y)",
+    # Normalize GNU `__inline` to ordinary `inline` so the parser sees a more
+    # standard spelling of the same keyword.
     "-D__inline=inline",
 )
+
+
 def _build_cpp_args(file_path: str | Path) -> list[str]:
+    """Return the Clang preprocessing flags needed for a parseable translation unit.
+
+    The returned argument list combines our compatibility defines with the
+    source file's directory and the repository's vendored include roots. This
+    keeps preprocessing deterministic and steers `pycparser` away from host
+    system headers that often contain unsupported compiler extensions.
+    """
+
+    # Start with the compatibility flags above, then prepend the source file's
+    # own directory and our vendored include trees so preprocessing sees the
+    # same project headers regardless of which file we parse.
     source_path = Path(file_path).resolve()
     cpp_args = list(_CPP_ARGS)
     seen_paths: set[Path] = set()
 
     for include_path in (source_path.parent, *_CPP_INCLUDES):
         resolved_path = include_path.resolve()
+        # Skip missing/duplicate include roots so we hand Clang a clean,
+        # deterministic `-I...` list.
         if not resolved_path.exists() or resolved_path in seen_paths:
             continue
         seen_paths.add(resolved_path)
@@ -78,7 +106,14 @@ def preprocess_file(
     no_guided_se: bool = False,
     guidance_output_path: str | Path | None = None,
 ) -> str:
-    """Preprocesses the input file using the pycparser library"""
+    """Apply all enabled AST preprocessing passes and render the result.
+
+    The file is first preprocessed with Clang into a `pycparser`-friendly AST.
+    Guided-search metadata, loop bounds, GPIO constraints, and CLI harnessing
+    are then applied in order before the final source-preserving renderer emits
+    the processed C translation unit.
+    """
+
     ast = parse_file(
         str(Path(file_path).resolve()),
         use_cpp=True,
@@ -94,194 +129,9 @@ def preprocess_file(
     if not no_loop_bounds:
         ast = add_loop_bounds(ast)
     if not no_gpio_constraints:
-        ast = constrain_gpio_reads(ast)
-
-    if cli_config_path and not no_cli_constraints and _is_coreutils_input(file_path):
-        processed_source = _render_coreutils_processed_source(file_path, ast)
-        harness_source = build_cli_harness_for_ast(ast, cli_config_path)
-        return _build_coreutils_cli_wrapper(processed_source, harness_source)
+        ast = add_gpio_constraints(ast)
 
     if cli_config_path and not no_cli_constraints:
-        from argument_constraints import add_argument_constraints
-
         ast = add_argument_constraints(ast, cli_config_path)
 
-    if _is_coreutils_input(file_path):
-        return _render_coreutils_processed_source(file_path, ast)
-
-    # Convert the final AST back into C code.
-    generator = c_generator.CGenerator()
-    c_code = generator.visit(ast)
-    return KLEE_PREAMBLE + c_code
-
-
-def constrain_structured_arguments(ast: FileAST, cli_config_path: str) -> FileAST:
-    from argument_constraints import add_argument_constraints
-
-    return add_argument_constraints(ast, cli_config_path)
-
-
-def constrain_gpio_reads(ast: FileAST) -> FileAST:
-    return add_gpio_constraints(ast)
-
-
-def _is_coreutils_input(file_path: str | Path) -> bool:
-    resolved_input = Path(file_path).resolve()
-    return _COREUTILS_ROOT.resolve() in (resolved_input, *resolved_input.parents)
-
-
-def _build_coreutils_cli_wrapper(processed_source: str, harness_source: str) -> str:
-    """Wrap processed Coreutils source with a renamed entrypoint and harness."""
-
-    if not processed_source.endswith("\n"):
-        processed_source = f"{processed_source}\n"
-
-    return (
-        f"#define main {ORIGINAL_MAIN_NAME}\n"
-        f"{processed_source}"
-        "\n#undef main\n\n"
-        f"{harness_source}"
-    )
-
-
-@dataclass(frozen=True)
-class _SourceSpan:
-    start: int
-    end: int
-
-
-def _render_coreutils_processed_source(file_path: str | Path, ast: FileAST) -> str:
-    """Rewrite only source-file function bodies, preserving Coreutils headers/macros."""
-
-    source_path = Path(file_path).resolve()
-    original_source = source_path.read_text()
-    generator = c_generator.CGenerator()
-    rewritten_source = original_source
-
-    replacements: list[tuple[_SourceSpan, str]] = []
-    for node in ast.ext:
-        if not _is_original_source_function(node, source_path):
-            continue
-        span = _function_definition_span(original_source, node)
-        replacements.append((span, generator.visit(node.body)))
-
-    for span, replacement in sorted(
-        replacements,
-        key=lambda item: item[0].start,
-        reverse=True,
-    ):
-        rewritten_source = (
-            f"{rewritten_source[:span.start]}"
-            f"{replacement}"
-            f"{rewritten_source[span.end:]}"
-        )
-
-    return f"{KLEE_PREAMBLE}{rewritten_source}"
-
-
-def _is_original_source_function(node: object, source_path: Path) -> bool:
-    if not isinstance(node, FuncDef):
-        return False
-    coord = getattr(node.decl, "coord", None)
-    return str(getattr(coord, "file", "")) == str(source_path)
-
-
-def _function_definition_span(source_text: str, node: FuncDef) -> _SourceSpan:
-    body_coord = node.body.coord
-    start = _line_col_to_offset(source_text, body_coord.line, body_coord.column)
-    end = _find_matching_brace(source_text, start) + 1
-    return _SourceSpan(start=start, end=end)
-
-
-def _line_col_to_offset(source_text: str, line: int, column: int) -> int:
-    current_line = 1
-    offset = 0
-    while current_line < line:
-        next_newline = source_text.find("\n", offset)
-        if next_newline == -1:
-            raise ValueError(f"Unable to find line {line} in source text.")
-        offset = next_newline + 1
-        current_line += 1
-    return offset + column - 1
-
-
-def _find_matching_brace(source_text: str, brace_offset: int) -> int:
-    if source_text[brace_offset] != "{":
-        raise ValueError("Expected function body to begin with an opening brace.")
-
-    depth = 0
-    index = brace_offset
-    in_string = False
-    in_char = False
-    in_line_comment = False
-    in_block_comment = False
-    escaping = False
-
-    while index < len(source_text):
-        char = source_text[index]
-        next_char = source_text[index + 1] if index + 1 < len(source_text) else ""
-
-        if in_line_comment:
-            if char == "\n":
-                in_line_comment = False
-            index += 1
-            continue
-
-        if in_block_comment:
-            if char == "*" and next_char == "/":
-                in_block_comment = False
-                index += 2
-                continue
-            index += 1
-            continue
-
-        if in_string:
-            if escaping:
-                escaping = False
-            elif char == "\\":
-                escaping = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-
-        if in_char:
-            if escaping:
-                escaping = False
-            elif char == "\\":
-                escaping = True
-            elif char == "'":
-                in_char = False
-            index += 1
-            continue
-
-        if char == "/" and next_char == "/":
-            in_line_comment = True
-            index += 2
-            continue
-
-        if char == "/" and next_char == "*":
-            in_block_comment = True
-            index += 2
-            continue
-
-        if char == '"':
-            in_string = True
-            index += 1
-            continue
-
-        if char == "'":
-            in_char = True
-            index += 1
-            continue
-
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return index
-
-        index += 1
-
-    raise ValueError("Unable to locate the end of the function definition.")
+    return render_processed_source(file_path, ast)

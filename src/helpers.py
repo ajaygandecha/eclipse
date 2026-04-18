@@ -1,3 +1,7 @@
+import os
+import sys
+
+
 def format_time_duration(seconds: float) -> str:
     """Render elapsed seconds as a small human-readable duration."""
 
@@ -12,3 +16,14 @@ def format_time_duration(seconds: float) -> str:
         parts.append(f"{minutes}m")
     parts.append(f"{secs}s")
     return " ".join(parts)
+
+
+def print_checkmarked_message(message: str) -> None:
+    """Print a green checkmark line when stdout is a TTY; plain text otherwise."""
+
+    mark = "\N{CHECK MARK}"
+    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+        line = f"\033[32m[{mark}]\033[0m {message}"
+    else:
+        line = f"[{mark}] {message}"
+    print(line, flush=True)

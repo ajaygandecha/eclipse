@@ -440,14 +440,3 @@ def build_cli_harness_source(spec: CLIProgramSpec, uses_argv: bool) -> str:
     """Render the standalone harness main source for a validated CLI spec."""
 
     return HarnessSourceBuilder(spec, uses_argv).build()
-
-
-def build_cli_harness_for_ast(ast: FileAST, config_path: str) -> str:
-    """Validate an AST entrypoint and render its standalone harness main."""
-
-    spec = load_cli_config(config_path)
-    visitor = ArgumentConstraintVisitor(spec)
-    visitor._validate_original_name_is_available(ast)
-    entrypoint = visitor._find_entrypoint_definition(ast)
-    visitor._validate_entrypoint_signature(entrypoint)
-    return build_cli_harness_source(spec, visitor.uses_argv)

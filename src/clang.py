@@ -1,12 +1,9 @@
 import subprocess
 import shutil
-import tempfile
 from pathlib import Path
 import sys
 import os
 from contextlib import contextmanager
-
-from preprocessor import _COREUTILS_ORIGINAL_SOURCE_PLACEHOLDER
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _COREUTILS_ROOT = _REPO_ROOT / "examples" / "coreutils"
@@ -279,20 +276,7 @@ def _coreutils_source_override(original_source_path: Path, replacement_source_pa
         return
 
     original_bytes = original_source_path.read_bytes()
-    with tempfile.NamedTemporaryFile(
-        prefix=f"{original_source_path.stem}-eclipse-original-",
-        suffix=original_source_path.suffix,
-        delete=False,
-    ) as temp_source:
-        temp_source.write(original_bytes)
-        temp_source_path = Path(temp_source.name)
-
     replacement_text = replacement_source_path.read_text()
-    if _COREUTILS_ORIGINAL_SOURCE_PLACEHOLDER in replacement_text:
-        replacement_text = replacement_text.replace(
-            _COREUTILS_ORIGINAL_SOURCE_PLACEHOLDER,
-            str(temp_source_path),
-        )
     original_source_path.write_text(replacement_text)
     try:
         yield

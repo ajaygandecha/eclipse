@@ -7,8 +7,6 @@ whole-program bitcode instead of a single `cut.c` object file.
 """
 
 import argparse
-import os
-import sys
 import time
 from pathlib import Path
 from cli_config import load_cli_config
@@ -16,27 +14,17 @@ from klee import run_klee
 from preprocessor import preprocess_file
 from clang import compile_input
 from helpers import format_time_duration
-
-
-def _print_status_ok(message: str) -> None:
-    """Print a green checkmark line when stdout is a TTY; plain text otherwise."""
-
-    mark = "\N{CHECK MARK}"
-    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
-        line = f"\033[32m[{mark}]\033[0m {message}"
-    else:
-        line = f"[{mark}] {message}"
-    print(line, flush=True)
+from helpers import print_checkmarked_message
 
 
 def _processed_output_path(input_path: Path) -> Path:
-    """Return the emitted post-preprocessing C path for an input source file."""
+    """Create the path for the processed C input file from the input path."""
 
     return input_path.with_name(f"{input_path.stem}-processed.c")
 
 
 def _guidance_output_path(input_path: Path) -> Path:
-    """Return the emitted guided-search metadata path for a source artifact."""
+    """Create the path for the guidance metadata file from the input path."""
 
     return input_path.with_name(f"{input_path.stem}-guidance.json")
 
@@ -85,13 +73,6 @@ if __name__ == "__main__":
             "A CLI config is required for structured CLI input processing."
         )
 
-    # if args.cli_config:
-    # if _is_coreutils_input(input_path):
-    #     raise RuntimeError(
-    #         "Structured CLI harness generation currently supports standalone "
-    #         "C inputs only; coreutils still use the whole-program KLEE flow."
-    #     )
-
     cli_config_path = Path(args.cli_config).resolve()
 
     preprocessed_code = preprocess_file(
@@ -113,16 +94,20 @@ if __name__ == "__main__":
     compile_input_path = _processed_output_path(input_path)
     compile_input_path.write_text(preprocessed_code)
 
-    _print_status_ok(f"Pre-processing complete (wrote to {compile_input_path})")
+    print_checkmarked_message(
+        f"Pre-processing complete (wrote to {compile_input_path})"
+    )
     if not args.no_guided_se:
         emitted_guidance_path = _guidance_output_path(input_path)
-        _print_status_ok(f"Guidance metadata emitted to {emitted_guidance_path}")
+        print_checkmarked_message(
+            f"Guidance metadata emitted to {emitted_guidance_path}"
+        )
 
     # Compile the input file into a LLVM bitcode file.
     compiled_input_file = compile_input(compile_input_path)
     # print("Compiled.", flush=True)
 
-    _print_status_ok("Compiled using clang")
+    print_checkmarked_message("Compiled using clang")
 
     # Run the LLVM bitcode file using KLEE.
     print(f"Running {compiled_input_file} using klee...", flush=True)

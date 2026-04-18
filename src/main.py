@@ -59,6 +59,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable guided symbolic execution.",
     )
+    parser.add_argument(
+        "--exit-on-first-error",
+        action="store_true",
+        help="Stop KLEE as soon as it hits the first configured memory error.",
+    )
     return parser.parse_args()
 
 
@@ -130,6 +135,7 @@ if __name__ == "__main__":
         ),
         guided_search=emitted_guidance_path is not None,
         guidance_file=str(emitted_guidance_path) if emitted_guidance_path else None,
+        exit_on_first_error=args.exit_on_first_error,
     )
 
     # Determine the time that symbolic execution finished.

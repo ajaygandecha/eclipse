@@ -1,7 +1,6 @@
 import subprocess
 import shutil
 from pathlib import Path
-import sys
 import os
 from contextlib import contextmanager
 
@@ -37,25 +36,6 @@ def compile_input(input_path: Path) -> str:
         )
         print("Compiling coreutils input...", flush=True)
         return _build_coreutils_bitcode(input_path, compiled_output_path)
-    elif sys.platform.startswith("linux"):
-        print(f"Compiling {input_path} using clang...", flush=True)
-        subprocess.run(
-            [
-                "clang",
-                "-Wno-tautological-constant-out-of-range-compare",
-                *_build_clang_fallback_include_flags(),
-                "-emit-llvm",
-                "-c",
-                "-g",
-                "-O0",
-                "-Xclang",
-                "-disable-O0-optnone",
-                str(input_path),
-                "-o",
-                str(compiled_output_path),
-            ],
-            check=True,
-        )
     else:
         print(f"Compiling {input_path} using clang...", flush=True)
         subprocess.run(
@@ -81,8 +61,14 @@ def compile_input(input_path: Path) -> str:
     return str(compiled_output_path)
 
 
-def _prepare_coreutils_source_tree(input_path: Path) -> tuple[Path, dict[str, str]]:
-    """Validate that the devcontainer-prepared Coreutils tree is ready to use."""
+def _prepare_coreutils_source_tree() -> tuple[Path, dict[str, str]]:
+    """Return the prepared Coreutils build root and its required toolchain env.
+
+    Coreutils compilation depends on a configured build tree created by the
+    devcontainer setup. This helper validates that preparation step and returns
+    the directory/environment pair used by the whole-program build flow.
+    """
+
     build_root = _COREUTILS_ROOT
     env = _coreutils_klee_env()
 
@@ -103,7 +89,7 @@ def _build_coreutils_bitcode(input_path: Path, compiled_output_path: Path) -> st
     path: generate Coreutils' built headers, build the linked utility with
     `wllvm`, then extract a `.bc` file from the final executable.
     """
-    build_root, env = _prepare_coreutils_source_tree(input_path)
+    build_root, env = _prepare_coreutils_source_tree()
     build_source_path = _coreutils_build_source_path(input_path)
     program_target = _coreutils_program_target(build_source_path)
     extract_bc_binary = _resolve_tool_binary("extract-bc")
@@ -151,12 +137,16 @@ def _build_coreutils_bitcode(input_path: Path, compiled_output_path: Path) -> st
 
 
 def _is_coreutils_input(input_path: Path) -> bool:
+    """Return whether the input path lives inside the vendored Coreutils tree."""
+
     resolved_input = input_path.resolve()
     resolved_coreutils_root = _COREUTILS_ROOT.resolve()
     return resolved_coreutils_root in (resolved_input, *resolved_input.parents)
 
 
 def _build_clang_fallback_include_flags() -> list[str]:
+    """Return include flags that let direct clang builds fall back to fake libc headers."""
+
     if _FAKE_LIBC_INCLUDE.exists():
         # Keep real system headers first, but use our fake libc headers as a
         # fallback for newer headers that may be missing on the host toolchain.
@@ -227,16 +217,16 @@ def _coreutils_built_sources(build_root: Path, env: dict[str, str]) -> list[str]
     return built_sources
 
 
-
-
 def _resolve_tool_binary(tool_name: str) -> str | None:
+    """Resolve a required external tool from PATH."""
+
     tool_binary = shutil.which(tool_name)
-    if tool_binary:
-        return tool_binary
-    return None
+    return tool_binary if tool_binary else None
 
 
 def _coreutils_input_relative_path(input_path: Path) -> Path:
+    """Return a Coreutils source path relative to the vendored project root."""
+
     return input_path.resolve().relative_to(_COREUTILS_ROOT.resolve())
 
 
@@ -268,8 +258,15 @@ def _coreutils_program_target(input_path: Path) -> str:
 
 
 @contextmanager
-def _coreutils_source_override(original_source_path: Path, replacement_source_path: Path):
-    """Temporarily build a Coreutils utility from an instrumented replacement source."""
+def _coreutils_source_override(
+    original_source_path: Path, replacement_source_path: Path
+):
+    """Temporarily replace a Coreutils source file while invoking the build.
+
+    This lets us compile the processed `*-processed.c` content through the real
+    Coreutils build system without permanently modifying the checked-in source
+    tree. The original file contents are always restored on exit.
+    """
 
     if original_source_path.resolve() == replacement_source_path.resolve():
         yield

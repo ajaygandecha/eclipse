@@ -13,15 +13,12 @@ def run_klee(
     guided_search: bool = False,
     guidance_file: str | None = None,
 ) -> str | None:
-    """
-    Symbolically executes the LLVM bitcode file using KLEE.
+    """Run KLEE on a bitcode artifact and return the output directory on success.
 
-    Args:
-        bitcode_file: The LLVM bitcode file to execute.
-        original_input_file: The original input file that was compiled to the bitcode file.
-
-    Returns:
-        The output directory of the KLEE run.
+    The output directory is created next to the original source file so each run
+    keeps its diagnostics, test cases, and replay artifacts close to the input
+    that produced them. If KLEE is unavailable or exits with an error code, the
+    function prints a short diagnostic and returns ``None``.
     """
 
     klee_binary = _resolve_klee_binary()
@@ -64,7 +61,12 @@ def _build_klee_command(
     klee_posix_command: str | None = None,
     guided_search: bool = False,
 ) -> list[str]:
-    """Build the KLEE command, appending POSIX-runtime args after the bitcode."""
+    """Assemble the KLEE argv list for a single symbolic-execution run.
+
+    POSIX-runtime arguments must appear after the bitcode path, so this helper
+    builds the fixed KLEE options first, appends the bitcode input, and then
+    expands any caller-provided POSIX argument string.
+    """
 
     klee_command = [
         klee_binary,
@@ -94,6 +96,13 @@ def _build_klee_command(
 
 
 def _build_klee_environment(guidance_file: str | None = None) -> dict[str, str]:
+    """Return the environment KLEE should run under for this invocation.
+
+    Guided search uses an environment variable to tell the runtime where to
+    find the generated guidance metadata. When guided search is disabled, the
+    variable is removed to avoid leaking stale state across runs.
+    """
+
     environment = os.environ.copy()
     if guidance_file:
         environment["ECLIPSE_GUIDANCE_FILE"] = guidance_file
@@ -103,6 +112,8 @@ def _build_klee_environment(guidance_file: str | None = None) -> dict[str, str]:
 
 
 def _resolve_klee_binary() -> str | None:
+    """Locate the `klee` executable in PATH or in common local install prefixes."""
+
     klee_binary = shutil.which("klee")
     if klee_binary:
         return klee_binary

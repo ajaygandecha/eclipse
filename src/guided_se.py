@@ -33,12 +33,29 @@ _DANGEROUS_API_NAMES = {
 
 @dataclass(frozen=True)
 class GuidanceMetadata:
+    """Structured guidance emitted for KLEE's guided-search mode.
+
+    `risky_functions` is the ordered list of function names that the analysis
+    considered interesting. `notes` explains why each function was flagged, so
+    the JSON output is both machine-consumable and readable when debugging the
+    analysis.
+    """
+
     risky_functions: tuple[str, ...]
     notes: dict[str, tuple[str, ...]]
     analysis_version: int = 1
 
 
 class _FunctionRiskVisitor(NodeVisitor):
+    """Collect lightweight "risk" notes while walking a single function body.
+
+    This visitor is intentionally heuristic-driven rather than exhaustive. The
+    goal is not to prove that a function is unsafe. The goal is to identify
+    functions that look more interesting than average for symbolic exploration,
+    for example because they perform pointer arithmetic, write through derived
+    pointers, or call string/memory APIs that are commonly involved in bugs.
+    """
+
     def __init__(self) -> None:
         self.notes: list[str] = []
         self._pointer_arithmetic_targets: set[str] = set()
@@ -93,6 +110,19 @@ class _FunctionRiskVisitor(NodeVisitor):
 
 
 def find_risky_functions(ast: FileAST) -> GuidanceMetadata:
+    """Analyze each function definition in an AST and summarize risky ones.
+
+    The process is:
+
+    1. iterate over top-level function definitions
+    2. run `_FunctionRiskVisitor` on each function body
+    3. keep only the functions for which the visitor recorded one or more notes
+    4. package the final result as `GuidanceMetadata`
+
+    This keeps the output small and focused on the parts of the program that
+    are most likely to benefit from guided symbolic execution.
+    """
+
     risky_functions: list[str] = []
     notes: dict[str, tuple[str, ...]] = {}
 
@@ -121,6 +151,8 @@ def write_guidance_file(
     output_path: str | Path,
     guidance: GuidanceMetadata,
 ) -> Path:
+    """Serialize guidance metadata to the JSON format consumed by KLEE."""
+
     destination = Path(output_path).resolve()
     payload = {
         "analysis_version": guidance.analysis_version,
@@ -132,6 +164,8 @@ def write_guidance_file(
 
 
 def _func_call_name(node: FuncCall) -> str | None:
+    """Extract a direct callee name from a call expression when possible."""
+
     callee = _strip_casts(node.name)
     if isinstance(callee, ID):
         return callee.name
@@ -139,6 +173,8 @@ def _func_call_name(node: FuncCall) -> str | None:
 
 
 def _is_non_constant_array_write(node: Assignment) -> bool:
+    """Return whether an assignment writes through an array with symbolic indexing."""
+
     target = _strip_casts(node.lvalue)
     if not isinstance(target, ArrayRef):
         return False
@@ -148,11 +184,15 @@ def _is_non_constant_array_write(node: Assignment) -> bool:
 
 
 def _is_pointer_arithmetic_expr(node: Node | None) -> bool:
+    """Return whether an expression is a simple pointer-arithmetic operation."""
+
     expr = _strip_casts(node)
     return isinstance(expr, BinaryOp) and expr.op in {"+", "-"}
 
 
 def _strip_casts(node: Node | None) -> Node | None:
+    """Peel away nested cast nodes so the underlying expression can be inspected."""
+
     expr = node
     while isinstance(expr, Cast):
         expr = expr.expr

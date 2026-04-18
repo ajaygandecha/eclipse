@@ -25,13 +25,26 @@ MAX_ITERATIONS = 10
 
 
 class LoopBoundsVisitor:
-    """Visits AST nodes and bounds loop iterations."""
+    """Rewrite loops so every `while`/`for` has an explicit iteration cap.
+
+    The visitor walks statement structure recursively. Whenever it finds a loop,
+    it injects:
+
+    - a fresh counter declaration before the loop
+    - an additional `counter < max_iterations` guard in the loop condition
+    - a counter increment at the end of the loop body
+
+    This keeps the transformed program structurally close to the original one
+    while ensuring symbolic execution does not wander into unbounded iteration.
+    """
 
     def __init__(self, max_iterations: int = MAX_ITERATIONS):
         self.max_iterations = max_iterations
         self.loop_counter_index = 0
 
     def visit(self, ast: FileAST) -> FileAST:
+        """Rewrite each top-level statement/function in the translation unit."""
+
         ast.ext = [self._visit_statement(node) for node in ast.ext]
         return ast
 
@@ -85,6 +98,8 @@ class LoopBoundsVisitor:
             loop_node.cond = BinaryOp(op="&&", left=loop_node.cond, right=bound_expr)
 
     def _visit_loop(self, loop_node: While | For) -> tuple[Decl, While | For]:
+        """Rewrite one loop and return the counter declaration plus new loop node."""
+
         counter_name = self._next_counter_name()
         loop_node.stmt = self._visit_statement(loop_node.stmt)
 
@@ -112,6 +127,13 @@ class LoopBoundsVisitor:
         return rewritten_items
 
     def _visit_statement(self, stmt: Optional[Node]) -> Optional[Node]:
+        """Recursively rewrite one statement subtree.
+
+        Most statement kinds are traversed in place. Loops are the special case:
+        they expand into a small compound block containing the fresh counter
+        declaration followed by the rewritten loop itself.
+        """
+
         if stmt is None:
             return stmt
 
@@ -148,5 +170,5 @@ class LoopBoundsVisitor:
 
 
 def add_loop_bounds(ast: FileAST) -> FileAST:
-    """Apply a bounded-iteration guard to every while/for loop."""
+    """Apply the loop-bounding visitor to an entire translation unit."""
     return LoopBoundsVisitor(max_iterations=MAX_ITERATIONS).visit(ast)

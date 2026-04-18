@@ -41,13 +41,26 @@ class CodeWriter:
 
 
 class ArgumentConstraintVisitor:
-    """Renames the original entrypoint and appends a generated harness main."""
+    """Turn a program entrypoint into a symbolic CLI harness.
+
+    This visitor performs the CLI transformation in three steps:
+
+    1. validate that the original entrypoint has a supported signature
+    2. rename that entrypoint to `__eclipse_original_main`
+    3. append a newly generated `main` function that creates symbolic CLI input
+
+    The resulting program keeps the original logic intact, but routes execution
+    through a harness that constructs symbolic `argc`/`argv` according to the
+    declarative YAML CLI specification.
+    """
 
     def __init__(self, spec: CLIProgramSpec):
         self.spec = spec
         self.uses_argv = False
 
     def visit(self, ast: FileAST) -> FileAST:
+        """Apply the full entrypoint-to-harness rewrite to a translation unit."""
+
         self._validate_original_name_is_available(ast)
         entrypoint = self._find_entrypoint_definition(ast)
         self._validate_entrypoint_signature(entrypoint)
@@ -167,7 +180,18 @@ class ArgumentConstraintVisitor:
 
 
 class HarnessSourceBuilder:
-    """Build readable C source for a symbolic CLI harness."""
+    """Generate readable C for the synthetic symbolic CLI harness.
+
+    The builder mirrors the structure of the CLI config:
+
+    - options become presence booleans and optional spelling selectors
+    - integer-valued arguments become symbolic ints plus range checks
+    - string-like arguments become symbolic buffers plus length/null checks
+    - the final `argv` array is assembled in the declared element order
+
+    The emitted harness ends by calling `__eclipse_original_main(...)`, so the
+    original program logic runs unchanged once symbolic inputs have been set up.
+    """
 
     def __init__(self, spec: CLIProgramSpec, uses_argv: bool):
         self.spec = spec
@@ -180,6 +204,8 @@ class HarnessSourceBuilder:
         }
 
     def build(self) -> str:
+        """Render the full synthetic `main` function as C source."""
+
         self.writer.start_block("int main(void)")
         if self.uses_argv:
             self.writer.line("int __eclipse_argc = 1;")
@@ -431,12 +457,12 @@ class HarnessSourceBuilder:
 
 
 def add_argument_constraints(ast: FileAST, config_path: str) -> FileAST:
-    """Generate a symbolic CLI harness around the program's main function."""
+    """Load the CLI spec and apply the argument-constraint visitor."""
 
     return ArgumentConstraintVisitor(load_cli_config(config_path)).visit(ast)
 
 
 def build_cli_harness_source(spec: CLIProgramSpec, uses_argv: bool) -> str:
-    """Render the standalone harness main source for a validated CLI spec."""
+    """Render harness source for a validated CLI spec without mutating an AST."""
 
     return HarnessSourceBuilder(spec, uses_argv).build()

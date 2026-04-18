@@ -51,12 +51,28 @@ EXPRESSION_STATEMENT_TYPES = (
 
 
 class GPIOConstraintVisitor:
-    """Visits AST nodes and replaces supported GPIO reads with symbolic values."""
+    """Rewrite supported GPIO reads into symbolic inputs.
+
+    The central challenge in this pass is that GPIO read calls can appear deep
+    inside expressions, not just as standalone statements. The visitor handles
+    that by recursively rewriting expressions and returning two pieces:
+
+    - a list of prefix statements that must execute before the rewritten node
+    - the rewritten expression/statement itself
+
+    When a GPIO read is found, the pass introduces a fresh symbolic variable,
+    emits the statements needed to make it symbolic, and replaces the original
+    call expression with that variable. Control-flow constructs such as `if`,
+    `while`, and `for` are then lowered as needed so those prefix statements run
+    in the right order before the condition/expression that uses them.
+    """
 
     def __init__(self) -> None:
         self.gpio_counter_index = 0
 
     def visit(self, ast: FileAST) -> FileAST:
+        """Rewrite each top-level node in the translation unit."""
+
         rewritten_ext = []
         for node in ast.ext:
             rewritten_ext.extend(self._rewrite_statement(node))
@@ -64,6 +80,8 @@ class GPIOConstraintVisitor:
         return ast
 
     def _rewrite_statement(self, stmt: Optional[Node]) -> list[Node]:
+        """Rewrite one statement subtree into zero or more replacement statements."""
+
         if stmt is None:
             return []
 
@@ -119,6 +137,8 @@ class GPIOConstraintVisitor:
         return prefix_nodes + [stmt]
 
     def _rewrite_while(self, stmt: While) -> list[Node]:
+        """Lower `while` loops when the condition needs GPIO prefix statements."""
+
         cond_prefix, stmt.cond = self._rewrite_expression(stmt.cond)
         stmt.stmt = self._wrap_statements(self._rewrite_statement(stmt.stmt))
 
@@ -132,6 +152,8 @@ class GPIOConstraintVisitor:
         return [While(cond=self._true_constant(), stmt=Compound(block_items=loop_body))]
 
     def _rewrite_for(self, stmt: For) -> list[Node]:
+        """Lower `for` loops when init/cond/next expressions need prefix statements."""
+
         init_prefix, stmt.init = self._rewrite_for_init(stmt.init)
         cond_prefix, stmt.cond = self._rewrite_expression(stmt.cond)
         next_prefix, stmt.next = self._rewrite_expression(stmt.next)
@@ -183,6 +205,13 @@ class GPIOConstraintVisitor:
         return self._rewrite_expression(init)
 
     def _rewrite_expression(self, expr: Optional[Node]) -> tuple[list[Node], Optional[Node]]:
+        """Rewrite an expression and return `(prefix_statements, rewritten_expr)`.
+
+        This is the core mechanism of the visitor. Expression nodes are walked
+        recursively so that any nested GPIO read can be lifted out into a fresh
+        symbolic variable without losing the surrounding expression structure.
+        """
+
         if expr is None:
             return [], expr
 
@@ -255,6 +284,8 @@ class GPIOConstraintVisitor:
         return prefix_nodes, expr_list
 
     def _replace_gpio_read(self) -> tuple[list[Node], ID]:
+        """Replace one recognized GPIO read call with a fresh symbolic variable."""
+
         symbol_name = self._next_symbol_name()
         return self._make_symbolic_prefix(symbol_name), ID(name=symbol_name)
 

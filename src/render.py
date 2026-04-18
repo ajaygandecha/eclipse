@@ -20,6 +20,14 @@ static char *__eclipse_int_to_string(int value, char *buffer, int buffer_size)
 
 @dataclass(frozen=True)
 class _SourceSpan:
+    """A half-open character span inside the original source text.
+
+    The renderer works by replacing exact text slices from the original file
+    rather than regenerating the entire translation unit. Each `_SourceSpan`
+    tells us which region of the source should be replaced by regenerated code
+    from the transformed AST.
+    """
+
     start: int
     end: int
 
@@ -27,11 +35,26 @@ class _SourceSpan:
 def render_processed_source(file_path: str | Path, ast: FileAST) -> str:
     """Render AST changes while preserving the original source text around them.
 
-    `pycparser` can round-trip function bodies well, but it does not preserve
-    comments, includes, macros, or other preprocessor structure when we emit an
-    entire translation unit. Our preprocessing passes only touch function-level
-    code plus the generated CLI harness, so we splice those pieces back into the
-    original source and leave the rest of the file exactly as-authored.
+    This module deliberately does *not* emit the whole file from `pycparser`'s
+    code generator. Doing that would lose too much original source structure:
+
+    - comments
+    - include directives
+    - macro layout
+    - formatting and other preprocessor-adjacent details
+
+    Instead, the renderer uses a source-preserving strategy:
+
+    1. read the original file text
+    2. find the source spans corresponding to function definitions and function
+       declarations that came from that file
+    3. regenerate only those AST nodes as C text
+    4. splice those regenerated snippets back into the original source
+    5. append generated top-level nodes, such as the synthetic CLI harness
+
+    This works well because the current preprocessing passes only change
+    function-level code and append a small amount of generated top-level code.
+    The surrounding translation unit can therefore remain exactly as-authored.
     """
 
     source_path = Path(file_path).resolve()
@@ -72,6 +95,8 @@ def render_processed_source(file_path: str | Path, ast: FileAST) -> str:
 
 
 def _is_source_file_function_like(node: object, source_path: Path) -> bool:
+    """Return whether a node is a source-backed function def/decl from this file."""
+
     coord = getattr(node, "coord", None)
     if str(getattr(coord, "file", "")) != str(source_path):
         return False
@@ -81,11 +106,20 @@ def _is_source_file_function_like(node: object, source_path: Path) -> bool:
 
 
 def _is_generated_top_level_node(node: object) -> bool:
+    """Return whether a top-level AST node was synthesized rather than parsed.
+
+    Generated nodes such as the CLI harness have no meaningful source file
+    coordinates, so the renderer cannot splice them back into an existing text
+    span. Instead, these nodes are appended after the preserved source.
+    """
+
     coord = getattr(node, "coord", None)
     return isinstance(node, Node) and getattr(coord, "file", None) in (None, "")
 
 
 def _function_like_span(source_text: str, node: FuncDef | Decl) -> _SourceSpan:
+    """Compute the exact source span occupied by a function def/decl node."""
+
     coord = getattr(node, "coord", None)
     if coord is None:
         raise ValueError("Expected source-backed function node to have coordinates.")
@@ -103,6 +137,8 @@ def _function_like_span(source_text: str, node: FuncDef | Decl) -> _SourceSpan:
 
 
 def _line_col_to_offset(source_text: str, line: int, column: int) -> int:
+    """Convert a 1-based line/column pair into a character offset."""
+
     current_line = 1
     offset = 0
     while current_line < line:
@@ -115,6 +151,21 @@ def _line_col_to_offset(source_text: str, line: int, column: int) -> int:
 
 
 def _find_function_like_start(source_text: str, line: int) -> int:
+    """Walk upward to find the true start of a function signature.
+
+    `pycparser` coordinates often point at the function name itself rather than
+    the first line of the full signature. For example, a function written as:
+
+    ```c
+    static int
+    main(...)
+    ```
+
+    may report a coordinate on the `main` line. This helper walks upward across
+    signature-continuation lines until it reaches the actual beginning of the
+    declaration.
+    """
+
     start_line = line
 
     # Function coordinates often point at the function name. Walk upward over
@@ -134,6 +185,8 @@ def _find_function_like_start(source_text: str, line: int) -> int:
 
 
 def _source_line(source_text: str, line: int) -> str:
+    """Return a single source line by 1-based index, without the trailing newline."""
+
     current_line = 1
     offset = 0
     while current_line < line:
@@ -150,6 +203,12 @@ def _source_line(source_text: str, line: int) -> str:
 
 
 def _find_matching_brace(source_text: str, brace_offset: int) -> int:
+    """Find the closing brace that matches the block starting at `brace_offset`.
+
+    The scan is string/comment aware, so braces inside comments or literals do
+    not interfere with finding the end of the function body.
+    """
+
     if source_text[brace_offset] != "{":
         raise ValueError("Expected function body to begin with an opening brace.")
 
@@ -232,6 +291,8 @@ def _find_matching_brace(source_text: str, brace_offset: int) -> int:
 
 
 def _find_block_start(source_text: str, start_offset: int) -> int:
+    """Find the first opening brace for a function definition starting at `start_offset`."""
+
     index = start_offset
     in_string = False
     in_char = False
@@ -306,6 +367,12 @@ def _find_block_start(source_text: str, start_offset: int) -> int:
 
 
 def _find_declaration_terminator(source_text: str, start_offset: int) -> int:
+    """Find the terminating semicolon for a function declaration span.
+
+    The scan ignores semicolons that appear inside comments, strings, character
+    literals, or nested parameter syntax.
+    """
+
     index = start_offset
     in_string = False
     in_char = False

@@ -5,6 +5,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pycparser import c_parser
 
@@ -13,6 +14,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from cli_config import OptionElement, OptionValueElement, PositionalElement, load_cli_config
 from main import processed_output_path
+import preprocessor
 from preprocessor import preprocess_file
 
 
@@ -232,7 +234,7 @@ class HarnessGenerationTests(unittest.TestCase):
     def test_coreutils_config_loads_optional_klee_posix_command(self) -> None:
         spec = load_cli_config(REPO_ROOT / "examples/coreutils/src/echo.yml")
 
-        self.assertEqual(spec.klee_posix_command, "--sym-args 0 2 4")
+        self.assertEqual(spec.klee_posix_command, "--sym-args 0 4 2")
 
     def test_rejects_sys_args_typo_in_klee_posix_command(self) -> None:
         invalid_yaml = """
@@ -256,6 +258,51 @@ class HarnessGenerationTests(unittest.TestCase):
         self.assertIn("int __eclipse_original_main()", generated)
         self.assertIn("return __eclipse_original_main();", generated)
         self.assertNotIn("__eclipse_argv", generated)
+
+    def test_coreutils_cli_wraps_processed_source_instead_of_original_include(self) -> None:
+        ast = object()
+        events: list[str] = []
+
+        def _record(name: str):
+            events.append(name)
+            return ast
+
+        with (
+            patch.object(preprocessor, "parse_file", return_value=ast),
+            patch.object(preprocessor, "_build_cpp_args", return_value=[]),
+            patch.object(preprocessor, "_is_coreutils_input", return_value=True),
+            patch.object(preprocessor, "add_loop_bounds", side_effect=lambda value: _record("loops")),
+            patch.object(preprocessor, "constrain_gpio_reads", side_effect=lambda value: _record("gpio")),
+            patch.object(
+                preprocessor,
+                "_render_coreutils_processed_source",
+                side_effect=lambda file_path, value: (
+                    events.append("render"),
+                    "/* processed */\nint worker(void) { return __eclipse_loop_bound_0; }\n",
+                )[1],
+            ),
+            patch.object(
+                preprocessor,
+                "build_cli_harness_for_ast",
+                side_effect=lambda value, config_path: (
+                    events.append("cli"),
+                    "int main(void)\n{\n  return __eclipse_original_main(0, 0);\n}\n",
+                )[1],
+            ),
+        ):
+            generated = preprocess_file(
+                str(REPO_ROOT / "examples/coreutils/src/echo.c"),
+                str(REPO_ROOT / "examples/coreutils/src/echo.yml"),
+                no_guided_se=True,
+            )
+
+        self.assertLess(events.index("loops"), events.index("gpio"))
+        self.assertLess(events.index("gpio"), events.index("cli"))
+        self.assertIn("#define main __eclipse_original_main", generated)
+        self.assertIn("/* processed */", generated)
+        self.assertIn("__eclipse_loop_bound_0", generated)
+        self.assertIn("int main(void)", generated)
+        self.assertNotIn("__ECLIPSE_COREUTILS_ORIGINAL_SOURCE__", generated)
 
     def _load_yaml_string(self, yaml_text: str):
         with tempfile.TemporaryDirectory() as temp_dir:

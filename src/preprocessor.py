@@ -3,8 +3,7 @@ from pathlib import Path
 
 from pycparser import parse_file, c_generator
 from pycparser.c_ast import FileAST, FuncDef
-from argument_constraints import ORIGINAL_MAIN_NAME, build_cli_harness_source
-from cli_config import load_cli_config
+from argument_constraints import ORIGINAL_MAIN_NAME, build_cli_harness_for_ast
 from gpio_constraints import add_gpio_constraints
 from guided_se import find_risky_functions, write_guidance_file
 from loop_bounds import add_loop_bounds
@@ -92,17 +91,20 @@ def preprocess_file(
         if guidance_output_path:
             write_guidance_file(guidance_output_path, guidance)
 
+    if not no_loop_bounds:
+        ast = add_loop_bounds(ast)
+    if not no_gpio_constraints:
+        ast = constrain_gpio_reads(ast)
+
     if cli_config_path and not no_cli_constraints and _is_coreutils_input(file_path):
-        return _build_coreutils_cli_wrapper(file_path, cli_config_path)
+        processed_source = _render_coreutils_processed_source(file_path, ast)
+        harness_source = build_cli_harness_for_ast(ast, cli_config_path)
+        return _build_coreutils_cli_wrapper(processed_source, harness_source)
 
     if cli_config_path and not no_cli_constraints:
         from argument_constraints import add_argument_constraints
 
         ast = add_argument_constraints(ast, cli_config_path)
-    if not no_gpio_constraints:
-        ast = constrain_gpio_reads(ast)
-    if not no_loop_bounds:
-        ast = add_loop_bounds(ast)
 
     if _is_coreutils_input(file_path):
         return _render_coreutils_processed_source(file_path, ast)
@@ -128,16 +130,16 @@ def _is_coreutils_input(file_path: str | Path) -> bool:
     return _COREUTILS_ROOT.resolve() in (resolved_input, *resolved_input.parents)
 
 
-def _build_coreutils_cli_wrapper(file_path: str | Path, cli_config_path: str) -> str:
-    """Generate a wrapper that preserves the real Coreutils translation unit."""
+def _build_coreutils_cli_wrapper(processed_source: str, harness_source: str) -> str:
+    """Wrap processed Coreutils source with a renamed entrypoint and harness."""
 
-    spec = load_cli_config(cli_config_path)
-    harness_source = build_cli_harness_source(spec, uses_argv=True)
+    if not processed_source.endswith("\n"):
+        processed_source = f"{processed_source}\n"
+
     return (
         f"#define main {ORIGINAL_MAIN_NAME}\n"
-        f'#include "{_COREUTILS_ORIGINAL_SOURCE_PLACEHOLDER}"\n'
-        "#undef main\n\n"
-        f"{KLEE_PREAMBLE}"
+        f"{processed_source}"
+        "\n#undef main\n\n"
         f"{harness_source}"
     )
 

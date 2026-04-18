@@ -3,6 +3,9 @@
   "workspaceFolder": "/workspace",
   "service": "eclipse-dev",
   "remoteUser": "klee",
+  "remoteEnv": {
+    "PATH": "/workspace:${containerEnv:PATH}"
+  },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {

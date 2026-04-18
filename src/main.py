@@ -8,16 +8,14 @@ whole-program bitcode instead of a single `cut.c` object file.
 
 import argparse
 import os
-import subprocess
-import shutil
 import sys
 import time
 from pathlib import Path
-from datetime import datetime
 from cli_config import load_cli_config
 from klee import run_klee
 from preprocessor import preprocess_file
 from clang import compile_input
+from helpers import format_time_duration
 
 
 def _print_status_ok(message: str) -> None:
@@ -31,48 +29,16 @@ def _print_status_ok(message: str) -> None:
     print(line, flush=True)
 
 
-def processed_output_path(input_path: Path) -> Path:
+def _processed_output_path(input_path: Path) -> Path:
     """Return the emitted post-preprocessing C path for an input source file."""
 
     return input_path.with_name(f"{input_path.stem}-processed.c")
 
 
-def guidance_output_path(input_path: Path) -> Path:
+def _guidance_output_path(input_path: Path) -> Path:
     """Return the emitted guided-search metadata path for a source artifact."""
 
     return input_path.with_name(f"{input_path.stem}-guidance.json")
-
-
-def _format_elapsed_duration(seconds: float) -> str:
-    """Render elapsed seconds as a small human-readable duration."""
-
-    total_seconds = max(0, int(round(seconds)))
-    hours, remainder = divmod(total_seconds, 3600)
-    minutes, secs = divmod(remainder, 60)
-
-    parts: list[str] = []
-    if hours:
-        parts.append(f"{hours}hr")
-    if hours or minutes:
-        parts.append(f"{minutes}m")
-    parts.append(f"{secs}s")
-    return " ".join(parts)
-
-
-def _is_coreutils_input(input_path: Path) -> bool:
-    """Return whether the input lives under the vendored Coreutils tree."""
-
-    coreutils_root = Path(__file__).resolve().parent.parent / "examples" / "coreutils"
-    resolved_input = input_path.resolve()
-    return coreutils_root.resolve() in (resolved_input, *resolved_input.parents)
-
-
-def _should_emit_preprocessed_source(
-    input_path: Path, no_cli_constraints: bool
-) -> bool:
-    """Decide whether this invocation should compile a generated C file."""
-
-    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -140,15 +106,16 @@ if __name__ == "__main__":
         ),
         no_guided_se=args.no_guided_se if args.no_guided_se else False,
         guidance_output_path=(
-            str(guidance_output_path(input_path)) if not args.no_guided_se else None
+            str(_guidance_output_path(input_path)) if not args.no_guided_se else None
         ),
     )
 
-    compile_input_path = processed_output_path(input_path)
+    compile_input_path = _processed_output_path(input_path)
     compile_input_path.write_text(preprocessed_code)
+
     _print_status_ok(f"Pre-processing complete (wrote to {compile_input_path})")
     if not args.no_guided_se:
-        emitted_guidance_path = guidance_output_path(input_path)
+        emitted_guidance_path = _guidance_output_path(input_path)
         _print_status_ok(f"Guidance metadata emitted to {emitted_guidance_path}")
 
     # Compile the input file into a LLVM bitcode file.
@@ -173,4 +140,4 @@ if __name__ == "__main__":
         guidance_file=str(emitted_guidance_path) if emitted_guidance_path else None,
     )
     klee_elapsed = time.monotonic() - klee_started_at
-    print(f"KLEE run time: {_format_elapsed_duration(klee_elapsed)}", flush=True)
+    print(f"KLEE run time: {format_time_duration(klee_elapsed)}", flush=True)

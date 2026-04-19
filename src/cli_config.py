@@ -17,8 +17,17 @@ class OptionElement:
 class PositionalElement:
     id: str
     optional: bool
-    min_length: int
-    max_length: int
+    value_kind: str
+    min: int
+    max: int
+
+    @property
+    def min_length(self) -> int:
+        return self.min
+
+    @property
+    def max_length(self) -> int:
+        return self.max
 
 
 @dataclass(frozen=True)
@@ -144,11 +153,45 @@ def _load_option_element(raw_element: dict[str, object]) -> OptionElement:
 def _load_positional_element(raw_element: dict[str, object]) -> PositionalElement:
     _reject_unknown_keys(
         raw_element,
-        {"id", "type", "optional", "min_length", "max_length"},
+        {"id", "type", "optional", "value_kind", "min", "max", "min_length", "max_length"},
         "positional element",
     )
     element_id = _require_identifier(raw_element.get("id"), "positional id")
     optional = _load_optional(raw_element)
+    value_kind = raw_element.get("value_kind", "string")
+    if value_kind not in {"int", "string"}:
+        raise ValueError(
+            f"Positional '{element_id}' must use value_kind 'int' or 'string'."
+        )
+
+    if value_kind == "int":
+        if "min_length" in raw_element or "max_length" in raw_element:
+            raise ValueError(
+                f"Integer positional '{element_id}' must use min/max, not min_length/max_length."
+            )
+        min_value = raw_element.get("min")
+        max_value = raw_element.get("max")
+        if not isinstance(min_value, int) or not isinstance(max_value, int):
+            raise ValueError(
+                f"Integer positional '{element_id}' must define integer min and max."
+            )
+        if min_value > max_value:
+            raise ValueError(
+                f"Integer positional '{element_id}' must satisfy min <= max."
+            )
+        return PositionalElement(
+            id=element_id,
+            optional=optional,
+            value_kind=value_kind,
+            min=min_value,
+            max=max_value,
+        )
+
+    if "min" in raw_element or "max" in raw_element:
+        raise ValueError(
+            f"String positional '{element_id}' must use min_length/max_length, not min/max."
+        )
+
     min_length = raw_element.get("min_length", 0)
     max_length = raw_element.get("max_length")
 
@@ -168,8 +211,9 @@ def _load_positional_element(raw_element: dict[str, object]) -> PositionalElemen
     return PositionalElement(
         id=element_id,
         optional=optional,
-        min_length=min_length,
-        max_length=max_length,
+        value_kind=value_kind,
+        min=min_length,
+        max=max_length,
     )
 
 
@@ -204,9 +248,7 @@ def _load_option_value_element(raw_element: dict[str, object]) -> OptionValueEle
             f"String option value '{element_id}' must use a non-negative max length."
         )
     if min_value > max_value:
-        raise ValueError(
-            f"Option value '{element_id}' must satisfy min <= max."
-        )
+        raise ValueError(f"Option value '{element_id}' must satisfy min <= max.")
 
     return OptionValueElement(
         id=element_id,
@@ -251,7 +293,9 @@ def _load_optional(raw_element: dict[str, object]) -> bool:
 
 def _load_spellings(raw_spellings: object, element_id: str) -> tuple[str, ...]:
     if not isinstance(raw_spellings, list) or not raw_spellings:
-        raise ValueError(f"Option '{element_id}' must define a non-empty spellings list.")
+        raise ValueError(
+            f"Option '{element_id}' must define a non-empty spellings list."
+        )
 
     spellings: list[str] = []
     for spelling in raw_spellings:
@@ -260,9 +304,7 @@ def _load_spellings(raw_spellings: object, element_id: str) -> tuple[str, ...]:
                 f"Option '{element_id}' spellings must be strings like '-n' or '--name'."
             )
         if spelling in spellings:
-            raise ValueError(
-                f"Option '{element_id}' repeats spelling '{spelling}'."
-            )
+            raise ValueError(f"Option '{element_id}' repeats spelling '{spelling}'.")
         spellings.append(spelling)
 
     return tuple(spellings)

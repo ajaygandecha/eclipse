@@ -8,18 +8,21 @@ from loop_bounds import add_loop_bounds
 from render import render_processed_source
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+_COREUTILS_ROOT = _REPO_ROOT / "examples" / "coreutils"
 _COREUTILS_LIB = _REPO_ROOT / "examples" / "coreutils" / "lib"
 _COREUTILS_SRC = _REPO_ROOT / "examples" / "coreutils" / "src"
 _COREUTILS_GNULIB_LIB = _REPO_ROOT / "examples" / "coreutils" / "gnulib" / "lib"
 _COREUTILS_GL_LIB = _REPO_ROOT / "examples" / "coreutils" / "gl" / "lib"
 _FAKE_LIBC_INCLUDE = _REPO_ROOT / "src" / "utils" / "fake_libc_include"
 
-# Define the include paths that Clang will use to find the header files
-_CPP_INCLUDES = (
+# Define the include paths that Clang will use to find the header files.
+_COREUTILS_CPP_INCLUDES = (
     _COREUTILS_LIB,
     _COREUTILS_SRC,
     _COREUTILS_GNULIB_LIB,
     _COREUTILS_GL_LIB,
+)
+_STANDALONE_CPP_INCLUDES = (
     _FAKE_LIBC_INCLUDE,
 )
 
@@ -90,17 +93,18 @@ def _build_cpp_args(file_path: str | Path) -> list[str]:
     source_path = Path(file_path).resolve()
 
     # Start with the compatibility flags above, then prepend the source file's
-    # own directory and our vendored include trees so preprocessing sees the
-    # same project headers regardless of which file we parse.
+    # own directory and the include roots needed for this input type.
     cpp_args = list(_CPP_ARGS)
 
     # We need to keep track of the paths we have already added to the argument list
     # to avoid duplicates.
     seen_paths: set[Path] = set()
 
-    # Add the source file's own directory and our vendored include trees so
-    # preprocessing sees the same project headers regardless of which file we parse.
-    for include_path in (source_path.parent, *_CPP_INCLUDES):
+    include_roots = _include_roots_for(source_path)
+
+    # Add the source file's own directory and the selected include roots so
+    # preprocessing sees the expected project headers for the current input.
+    for include_path in (source_path.parent, *include_roots):
         resolved_path = include_path.resolve()
         # Skip missing/duplicate include roots so we hand Clang a clean,
         # deterministic `-I...` list.
@@ -110,6 +114,22 @@ def _build_cpp_args(file_path: str | Path) -> list[str]:
         cpp_args.append(f"-I{resolved_path}")
 
     return cpp_args
+
+
+def _include_roots_for(source_path: Path) -> tuple[Path, ...]:
+    """Return the non-source include roots needed to preprocess `source_path`."""
+
+    if _is_coreutils_input(source_path):
+        return (*_COREUTILS_CPP_INCLUDES, *_STANDALONE_CPP_INCLUDES)
+    return _STANDALONE_CPP_INCLUDES
+
+
+def _is_coreutils_input(file_path: str | Path) -> bool:
+    """Return whether `file_path` lives inside the vendored Coreutils tree."""
+
+    resolved_input = Path(file_path).resolve()
+    resolved_coreutils_root = _COREUTILS_ROOT.resolve()
+    return resolved_coreutils_root in (resolved_input, *resolved_input.parents)
 
 
 def preprocess_file(

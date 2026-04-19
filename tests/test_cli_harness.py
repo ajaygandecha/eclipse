@@ -56,6 +56,15 @@ class CLIConfigTests(unittest.TestCase):
         self.assertIsInstance(spec.elements[2], OptionValueElement)
         self.assertIsInstance(spec.elements[3], PositionalElement)
 
+    def test_loads_integer_positional_yaml(self) -> None:
+        spec = load_cli_config(REPO_ROOT / "examples/vulnerable/repeat.yml")
+        count = spec.elements[1]
+
+        self.assertIsInstance(count, PositionalElement)
+        self.assertEqual(count.value_kind, "int")
+        self.assertEqual(count.min, 1)
+        self.assertEqual(count.max, 8)
+
     def test_rejects_legacy_schema(self) -> None:
         legacy_yaml = """
         program: tool
@@ -129,6 +138,22 @@ class CLIConfigTests(unittest.TestCase):
                       max_length: 2
                 """,
                 "min_length <= max_length",
+            ),
+            (
+                "int_positional_wrong_keys",
+                """
+                program: tool
+                entry_point: main
+                args:
+                  argv0: "tool"
+                  elements:
+                    - id: count
+                      type: positional
+                      value_kind: int
+                      min_length: 1
+                      max_length: 3
+                """,
+                "must use min/max",
             ),
         )
 
@@ -225,6 +250,20 @@ class HarnessGenerationTests(unittest.TestCase):
 
         parsed = c_parser.CParser().parse(generated)
         self.assertIsNotNone(parsed)
+
+    def test_integer_positional_uses_symbolic_int_and_stringified_argv(self) -> None:
+        generated = preprocess_file(
+            str(REPO_ROOT / "examples/vulnerable/repeat.c"),
+            str(REPO_ROOT / "examples/vulnerable/repeat.yml"),
+            no_guided_se=True,
+        )
+
+        self.assertIn("int sym_count;", generated)
+        self.assertIn('klee_make_symbolic(&sym_count, sizeof(sym_count), "count");', generated)
+        self.assertIn("klee_assume((sym_count >= 1) && (sym_count <= 8));", generated)
+        self.assertIn("char __eclipse_count_value[2];", generated)
+        self.assertIn("__eclipse_int_to_string(sym_count, __eclipse_count_value, sizeof(__eclipse_count_value))", generated)
+        self.assertNotIn("char sym_count[", generated)
 
     def test_gpio_preprocessing_preserves_function_prototype_semicolons(self) -> None:
         generated = preprocess_file(

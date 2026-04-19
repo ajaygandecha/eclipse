@@ -130,7 +130,7 @@ if __name__ == "__main__":
         input_path,
         klee_posix_command=(
             load_cli_config(cli_config_path).klee_posix_command
-            if not args.no_cli_constraints
+            if args.no_cli_constraints
             else None
         ),
         guided_search=emitted_guidance_path is not None,

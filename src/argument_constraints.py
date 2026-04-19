@@ -296,6 +296,18 @@ class HarnessSourceBuilder:
                 f"{element.id}_present",
             )
 
+        if element.value_kind == "int":
+            value_var = self._int_value_var(element.id)
+            self.writer.line(f"int {value_var};")
+            self._emit_symbolic_integer(value_var, element.id)
+            self.writer.line(
+                self._assume(self._range_expr(value_var, element.min, element.max))
+            )
+            self.writer.line(
+                f"char {self._int_buffer_var(element.id)}[{self._int_buffer_size(element.min, element.max)}];"
+            )
+            return
+
         self._emit_string_storage(
             buffer_name=self._string_buffer_var(element.id),
             length_name=self._length_var(element.id),
@@ -404,12 +416,20 @@ class HarnessSourceBuilder:
 
     def _emit_positional_into_argv(self, element: PositionalElement) -> None:
         presence_expr = self._presence_expr(element.id, element.optional)
+        argv_expr = (
+            "__eclipse_int_to_string("
+            f"{self._int_value_var(element.id)}, "
+            f"{self._int_buffer_var(element.id)}, "
+            f"sizeof({self._int_buffer_var(element.id)}))"
+            if element.value_kind == "int"
+            else self._string_buffer_var(element.id)
+        )
         if presence_expr == "1":
-            self._append_argv_item(self._string_buffer_var(element.id))
+            self._append_argv_item(argv_expr)
             return
 
         self.writer.start_block(f"if ({presence_expr})")
-        self._append_argv_item(self._string_buffer_var(element.id))
+        self._append_argv_item(argv_expr)
         self.writer.end_block()
 
     def _append_argv_item(self, expr: str) -> None:

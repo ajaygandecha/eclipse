@@ -1,0 +1,6 @@
+program: crazy
+entry_point: main
+
+args:
+  argv0: "crazy"
+  elements:

@@ -1,0 +1,31 @@
+{
+  "analysis_version": 1,
+  "notes": {
+    "diffuse_grid": [
+      "contains non-constant array index write"
+    ],
+    "fill_buffer": [
+      "contains non-constant array index write"
+    ],
+    "init_grid": [
+      "contains non-constant array index write"
+    ],
+    "mutate_buffer": [
+      "contains non-constant array index write"
+    ],
+    "q_init": [
+      "contains non-constant array index write"
+    ],
+    "q_push": [
+      "contains non-constant array index write"
+    ]
+  },
+  "risky_functions": [
+    "q_init",
+    "q_push",
+    "init_grid",
+    "diffuse_grid",
+    "fill_buffer",
+    "mutate_buffer"
+  ]
+}

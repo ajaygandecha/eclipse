@@ -1,0 +1,6 @@
+program: scalar_read_assignment
+entry_point: main
+
+args:
+  argv0: "scalar_read_assignment"
+  elements:

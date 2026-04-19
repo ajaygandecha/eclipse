@@ -1,0 +1,36 @@
+extern int snprintf(char *str, unsigned long size, const char *format, ...);
+extern void klee_assert(int condition);
+
+static char *__eclipse_int_to_string(int value, char *buffer, int buffer_size)
+{
+  snprintf(buffer, buffer_size, "%d", value);
+  return buffer;
+}
+
+
+struct gpiod_line_request;
+
+void klee_make_symbolic(void *addr, int nbytes, char *name);
+void klee_assume(int expr);
+int gpiod_line_request_get_value(struct gpiod_line_request *request, unsigned int offset);
+
+int __eclipse_original_main()
+{
+  struct gpiod_line_request *request;
+  unsigned int pin = 17;
+  int __eclipse_gpio_value_0;
+  klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
+  klee_assume((__eclipse_gpio_value_0 == 0) || (__eclipse_gpio_value_0 == 1));
+  if (__eclipse_gpio_value_0)
+  {
+    return 1;
+  }
+  return 0;
+}
+
+int main(void)
+{
+  return __eclipse_original_main();
+}
+
+

@@ -1,0 +1,6 @@
+program: multiple_reads_expression
+entry_point: main
+
+args:
+  argv0: "multiple_reads_expression"
+  elements:

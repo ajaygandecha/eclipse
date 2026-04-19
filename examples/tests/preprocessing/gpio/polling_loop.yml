@@ -1,0 +1,6 @@
+program: polling_loop
+entry_point: main
+
+args:
+  argv0: "polling_loop"
+  elements:

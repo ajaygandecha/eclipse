@@ -252,7 +252,7 @@ int expensive_mixer(int seed) {
     return x;
 }
 
-int main(void) {
+int main() {
     int grid[12][12];
     char buf[64];
     Queue q;

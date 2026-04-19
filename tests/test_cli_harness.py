@@ -226,6 +226,35 @@ class HarnessGenerationTests(unittest.TestCase):
         parsed = c_parser.CParser().parse(generated)
         self.assertIsNotNone(parsed)
 
+    def test_gpio_preprocessing_preserves_function_prototype_semicolons(self) -> None:
+        generated = preprocess_file(
+            str(REPO_ROOT / "examples/tests/preprocessing/gpio/scalar_read_assignment.c"),
+            str(REPO_ROOT / "examples/tests/preprocessing/gpio/scalar_read_assignment.yml"),
+        )
+
+        self.assertIn(
+            "void klee_make_symbolic(void *addr, int nbytes, char *name);",
+            generated,
+        )
+        self.assertIn("void klee_assume(int expr);", generated)
+        self.assertIn("int gpiod_line_get_value(struct gpiod_line *line);", generated)
+        self.assertIn("int consume(int value);", generated)
+
+        parsed = c_parser.CParser().parse(generated)
+        self.assertIsNotNone(parsed)
+
+    def test_gpio_preprocessing_skips_duplicate_klee_preamble_declarations(self) -> None:
+        generated = preprocess_file(
+            str(REPO_ROOT / "examples/tests/preprocessing/gpio/scalar_read_assignment.c"),
+            str(REPO_ROOT / "examples/tests/preprocessing/gpio/scalar_read_assignment.yml"),
+        )
+
+        self.assertNotIn(
+            "extern void klee_make_symbolic(void *addr, unsigned long nbytes, const char *name);",
+            generated,
+        )
+        self.assertNotIn("extern void klee_assume(int condition);", generated)
+
     def test_option_value_element_is_loaded(self) -> None:
         spec = load_cli_config(REPO_ROOT / "examples/tests/cli/head_like.yml")
 

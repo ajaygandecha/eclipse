@@ -1,0 +1,22 @@
+program: flag_and_message
+entry_point: main
+
+args:
+  argv0: "flag-and-message"
+  elements:
+    - id: loud
+      type: option
+      optional: true
+      spellings: ["-l", "--loud"]
+
+    - id: message
+      type: positional
+      optional: true
+      min_length: 1
+      max_length: 6
+
+    - id: suffix
+      type: positional
+      optional: true
+      min_length: 1
+      max_length: 2

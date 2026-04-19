@@ -4,17 +4,23 @@ from pathlib import Path
 from pycparser import c_generator
 from pycparser.c_ast import Decl, FileAST, FuncDecl, FuncDef, Node
 
-KLEE_PREAMBLE = """extern int snprintf(char *str, unsigned long size, const char *format, ...);
-extern void klee_make_symbolic(void *addr, unsigned long nbytes, const char *name);
-extern void klee_assume(int condition);
-extern void klee_assert(int condition);
-
-static char *__eclipse_int_to_string(int value, char *buffer, int buffer_size)
+_KLEE_DECLARATIONS = (
+    (
+        "snprintf",
+        "extern int snprintf(char *str, unsigned long size, const char *format, ...);",
+    ),
+    (
+        "klee_make_symbolic",
+        "extern void klee_make_symbolic(void *addr, unsigned long nbytes, const char *name);",
+    ),
+    ("klee_assume", "extern void klee_assume(int condition);"),
+    ("klee_assert", "extern void klee_assert(int condition);"),
+)
+_KLEE_HELPERS = """static char *__eclipse_int_to_string(int value, char *buffer, int buffer_size)
 {
   snprintf(buffer, buffer_size, "%d", value);
   return buffer;
 }
-
 """
 
 
@@ -70,7 +76,7 @@ def render_processed_source(file_path: str | Path, ast: FileAST) -> str:
         # their original form while still letting the AST drive our edits.
         if _is_source_file_function_like(node, source_path):
             span = _function_like_span(original_source, node)
-            replacements.append((span, generator.visit(node)))
+            replacements.append((span, _render_function_like_node(generator, node)))
             continue
         # Generated harness functions have no source coordinates, so we append
         # them after the preserved source instead of trying to splice them in.
@@ -88,10 +94,26 @@ def render_processed_source(file_path: str | Path, ast: FileAST) -> str:
             f"{rewritten_source[span.end:]}"
         )
 
-    rendered_parts = [KLEE_PREAMBLE, rewritten_source.rstrip()]
+    rendered_parts = [_build_klee_preamble(ast, source_path), rewritten_source.rstrip()]
     if appended_nodes:
         rendered_parts.append("\n\n".join(appended_nodes))
     return "\n\n".join(part for part in rendered_parts if part) + "\n"
+
+
+def _build_klee_preamble(ast: FileAST, source_path: Path) -> str:
+    """Build the helper preamble while avoiding duplicate source declarations."""
+
+    declared_names = {
+        _function_like_name(node)
+        for node in ast.ext
+        if _is_source_file_function_like(node, source_path)
+    }
+    declarations = [
+        declaration
+        for name, declaration in _KLEE_DECLARATIONS
+        if name not in declared_names
+    ]
+    return "\n".join([*declarations, "", _KLEE_HELPERS]).strip() + "\n"
 
 
 def _is_source_file_function_like(node: object, source_path: Path) -> bool:
@@ -115,6 +137,25 @@ def _is_generated_top_level_node(node: object) -> bool:
 
     coord = getattr(node, "coord", None)
     return isinstance(node, Node) and getattr(coord, "file", None) in (None, "")
+
+
+def _function_like_name(node: FuncDef | Decl) -> str:
+    """Return the declared function name for a function definition/prototype."""
+
+    if isinstance(node, FuncDef):
+        return node.decl.name
+    return node.name
+
+
+def _render_function_like_node(
+    generator: c_generator.CGenerator, node: FuncDef | Decl
+) -> str:
+    """Render a function definition/prototype with the source-compatible suffix."""
+
+    rendered = generator.visit(node)
+    if isinstance(node, Decl) and isinstance(node.type, FuncDecl):
+        return rendered + ";"
+    return rendered
 
 
 def _function_like_span(source_text: str, node: FuncDef | Decl) -> _SourceSpan:

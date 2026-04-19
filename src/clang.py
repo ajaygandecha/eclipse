@@ -78,6 +78,7 @@ def compile_input(input_path: Path) -> str:
         # by the program. So, we use `-idirafter` to append the fake libc headers
         # to the end of the header search path if the host toolchain is missing
         # any headers.
+        source_include_flags = ["-I", str(input_path.parent.resolve())]
         fallback_include_flags = (
             ["-idirafter", str(_FAKE_LIBC_INCLUDE.resolve())]
             if _FAKE_LIBC_INCLUDE.exists()
@@ -85,6 +86,8 @@ def compile_input(input_path: Path) -> str:
         )
         subprocess.run(
             ["clang"]
+            # Prefer local benchmark/example headers first.
+            + source_include_flags
             # Add the fallback include .h flags to the Clang command.
             + fallback_include_flags
             # Add the direct Clang flags to the Clang command.

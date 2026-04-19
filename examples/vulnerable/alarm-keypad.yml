@@ -1,0 +1,21 @@
+program: alarm-keypad
+entry_point: main
+
+klee_posix_command: " --sym-arg 2 --sym-arg 1"
+
+args:
+  argv0: "alarm-keypad"
+  elements:
+    - id: max_polls
+      type: positional
+      value_kind: int
+      optional: false
+      min: 1
+      max: 99
+
+    - id: digit
+      type: positional
+      value_kind: int
+      optional: false
+      min: 1
+      max: 9

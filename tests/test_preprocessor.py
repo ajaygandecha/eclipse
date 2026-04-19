@@ -40,16 +40,36 @@ class PreprocessorIncludeTests(unittest.TestCase):
 
 
 class PreprocessorRegressionTests(unittest.TestCase):
-    def test_repeat_and_copy_preprocesses_with_standard_headers(self) -> None:
+    def test_repeat_preprocesses_with_standard_headers(self) -> None:
         generated = preprocess_file(
-            str(REPO_ROOT / "examples/vulnerable/repeat-and-copy.c"),
-            str(REPO_ROOT / "examples/vulnerable/repeat-and-copy.yml"),
+            str(REPO_ROOT / "examples/vulnerable/repeat.c"),
+            str(REPO_ROOT / "examples/vulnerable/repeat.yml"),
             no_guided_se=True,
         )
 
         self.assertIn("int __eclipse_original_main(int argc, char *argv[])", generated)
-        self.assertIn('__eclipse_argv[0] = "repeat-and-copy";', generated)
-        self.assertIn("char sym_word[17];", generated)
+        self.assertIn('__eclipse_argv[0] = "repeat";', generated)
+        self.assertIn("char sym_word[6];", generated)
+
+    def test_alarm_keypad_preprocesses_and_rewrites_gpio_reads(self) -> None:
+        generated = preprocess_file(
+            str(REPO_ROOT / "examples/vulnerable/alarm-keypad.c"),
+            str(REPO_ROOT / "examples/vulnerable/alarm-keypad.yml"),
+            no_guided_se=True,
+        )
+
+        self.assertIn("int __eclipse_gpio_value_0;", generated)
+        self.assertIn("int __eclipse_gpio_value_1;", generated)
+        self.assertIn("int button = __eclipse_gpio_value_0;", generated)
+        self.assertIn("int armed = __eclipse_gpio_value_1;", generated)
+        self.assertNotIn(
+            "int button = gpiod_line_request_get_value(request, BUTTON_PIN);",
+            generated,
+        )
+        self.assertNotIn(
+            "int armed  = gpiod_line_request_get_value(request, ARMED_PIN);",
+            generated,
+        )
 
 
 if __name__ == "__main__":

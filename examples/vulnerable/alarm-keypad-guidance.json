@@ -1,0 +1,11 @@
+{
+  "analysis_version": 1,
+  "notes": {
+    "main": [
+      "contains non-constant array index write"
+    ]
+  },
+  "risky_functions": [
+    "main"
+  ]
+}

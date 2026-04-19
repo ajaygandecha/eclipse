@@ -1,0 +1,18 @@
+program: buggy
+entry_point: main
+
+klee_posix_command: "--sym-arg 2 --sym-arg 4"
+
+args:
+  argv0: "buggy"
+  elements: 
+    - id: mode
+      type: option
+      optional: false
+      spellings: ["-c", "-l"]
+
+    - id: word
+      type: positional
+      optional: false
+      min_length: 1
+      max_length: 4

@@ -2,10 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s (-c (copy) | -l (literal)) <word>\n", argv[0]);
+        fprintf(stderr, "Usage: %s (-c | -l | -f) <word>\n", argv[0]);
         return 1;
     }
 
@@ -38,7 +37,6 @@ int main(int argc, char *argv[]) {
          * Bug 2: ReadOnly error
          *
          * Point at a string literal and then attempt to modify it.
-         * KLEE should treat this as a write to read-only memory.
          */
         char *status = "READY";
 
@@ -48,8 +46,33 @@ int main(int argc, char *argv[]) {
 
         printf("Status: %s\n", status);
 
+    } else if (strcmp(mode, "-f") == 0) {
+        /*
+         * Bug 3: Free error
+         *
+         * Allocate heap memory, then free a shifted pointer instead of
+         * the original base pointer.
+         */
+        size_t len = strlen(word);
+        char *heap = malloc(len + 1);
+
+        if (heap == NULL) {
+            fprintf(stderr, "malloc failed\n");
+            return 1;
+        }
+
+        strcpy(heap, word);
+
+        if (len > 0) {
+            free(heap + 1);              /* Intentional invalid free */
+        } else {
+            free(heap);                  /* Avoid freeing heap+1 when word is empty */
+        }
+
+        printf("Freed word buffer\n");
+
     } else {
-        fprintf(stderr, "Usage: %s (-c | -l) <word>\n", argv[0]);
+        fprintf(stderr, "Usage: %s (-c | -l | -f) <word>\n", argv[0]);
         return 1;
     }
 

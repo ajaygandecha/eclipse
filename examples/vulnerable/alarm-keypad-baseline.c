@@ -111,31 +111,10 @@ int main(int argc, char *argv[]) {
         klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
         int armed = __eclipse_gpio_value_1;
 
-        
-        if (button < 0 || armed < 0) {
-            perror("gpiod_line_request_get_value");
-            cleanup_request(request);
-            cleanup_config(line_cfg, settings, req_cfg, chip);
-            return 1;
-        }
 
         if (button == 1 && armed == 1) {
             code[code_len++] = digit;   /* Intentional memory safety bug */
-        } 
-        // else if (button == 1 && armed == 0) {
-        //     /* Button press while disarmed: ignore it. */
-        // } else if (button == 0 && armed == 1) {
-        //     /* Armed but no button press: continue polling. */
-        // } else if (button == 0 && armed == 0) {
-        //     /* Idle state. */
-        // } else {
-        //     /*
-        //      * Explicit invalid-state branch.
-        //      * Real GPIO line values should be 0 or 1 on success;
-        //      * unexpected values are semantically invalid for this benchmark.
-        //      */
-        //     printf("Unexpected GPIO state: button=%d armed=%d\n", button, armed);
-        // }
+        }
     }
 
     code[code_len] = '\0';   /* Also unsafe if code_len overflowed */

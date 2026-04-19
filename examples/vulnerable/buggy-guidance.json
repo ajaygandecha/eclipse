@@ -2,7 +2,8 @@
   "analysis_version": 1,
   "notes": {
     "main": [
-      "contains non-constant array index write"
+      "contains non-constant array index write",
+      "calls dangerous API 'strcpy'"
     ]
   },
   "risky_functions": [

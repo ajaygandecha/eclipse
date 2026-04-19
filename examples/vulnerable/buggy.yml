@@ -9,7 +9,7 @@ args:
     - id: mode
       type: option
       optional: false
-      spellings: ["-c", "-l"]
+      spellings: ["-c", "-l", "-f"]
 
     - id: word
       type: positional

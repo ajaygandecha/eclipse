@@ -1,0 +1,12 @@
+{
+  "analysis_version": 1,
+  "notes": {
+    "main": [
+      "calls dangerous API 'strcpy'",
+      "calls dangerous API 'strcat'"
+    ]
+  },
+  "risky_functions": [
+    "main"
+  ]
+}

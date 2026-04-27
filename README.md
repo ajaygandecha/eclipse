@@ -1,5 +1,7 @@
 # ECLIPSE
 
+> Final project for **COMP 637: Formal Methods for System Security** at UNC-Chapel Hill by [Ajay Gandecha](https://github.com/ajaygandecha), [Ben Chesser](https://github.com/wbenchesser), and [Will Zahrt](https://github.com/wzahrt).
+
 **ECLIPSE** *(Embedded CLI Program Symbolic Executor)* is a symbolic execution tool that finds memory safety vulnerabilities in C-based CLI programs. 
 
 At a high level, ECLIPSE operates as a pipeline-style program which is the target CLI utility to analyze, and (2) a YAML-based CLI specification file. The CLI specification file describes the structure of valid input to the target C program and its constraints, such as supported flags and options, data types, and valid values (e.g., enumerations or bounds on integer ranges or string lengths). The program is first transformed by a custom preprocessor to constrain inputs, model hardware interactions, and bound potential sources of path explosion. ECLIPSE then compiles the transformed program into LLVM bitcode using Clang and performs symbolic execution us- ing KLEE with a guided search strategy. Finally, ECLIPSE produces a report describing discovered vulnerabilities along with concrete inputs that reproduce them. An overview of ECLIPSE’s workflow is shown in Figure 1. ECLIPSE and most of its functionality is written in Python.

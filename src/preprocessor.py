@@ -22,6 +22,15 @@ _COREUTILS_CPP_INCLUDES = (
     _COREUTILS_GNULIB_LIB,
     _COREUTILS_GL_LIB,
 )
+_COREUTILS_CPP_PLATFORM_FIXES = (
+    # Coreutils preprocessing uses vendored headers plus `-nostdinc`, so if the
+    # host compiler advertises macOS predefined macros, gnulib wrappers can take
+    # Apple-specific branches that require SDK headers we intentionally hid.
+    "-U__APPLE__",
+    "-U__MACH__",
+    "-U__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
+    "-UMAC_OS_X_VERSION_MIN_REQUIRED",
+)
 _STANDALONE_CPP_INCLUDES = (
     _FAKE_LIBC_INCLUDE,
 )
@@ -72,6 +81,9 @@ _CPP_ARGS = (
     # Replace Clang/GCC's compile-time choose-expression builtin with its
     # fallback arm. This is a simplification, but it keeps headers parseable.
     "-D__builtin_choose_expr(c,x,y)=(y)",
+    # Collapse GNU typeof expressions to a simple parseable stand-in type. The
+    # AST passes only need structurally valid C, not exact type metaprogramming.
+    "-D__typeof__(x)=int",
     # Normalize GNU `__inline` to ordinary `inline` so the parser sees a more
     # standard spelling of the same keyword.
     # NOTE: Necessary for CoreUtils' `echo` program.
@@ -95,6 +107,8 @@ def _build_cpp_args(file_path: str | Path) -> list[str]:
     # Start with the compatibility flags above, then prepend the source file's
     # own directory and the include roots needed for this input type.
     cpp_args = list(_CPP_ARGS)
+    if _is_coreutils_input(source_path):
+        cpp_args.extend(_COREUTILS_CPP_PLATFORM_FIXES)
 
     # We need to keep track of the paths we have already added to the argument list
     # to avoid duplicates.

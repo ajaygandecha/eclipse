@@ -106,6 +106,15 @@ int main(int argc, char *argv[]) {
         int button = gpiod_line_request_get_value(request, BUTTON_PIN);
         int armed  = gpiod_line_request_get_value(request, ARMED_PIN);
 
+        if(button < 0 || button > 1) {
+            fprintf(stderr, "Invalid button value: %d\n", button);
+            return 1;
+        }
+        if(armed < 0 || armed > 1) {
+            fprintf(stderr, "Invalid armed value: %d\n", armed);
+            return 1;
+        }
+
         if (button == 1 && armed == 1) {
             code[code_len++] = digit;   /* Intentional memory safety bug */
         }

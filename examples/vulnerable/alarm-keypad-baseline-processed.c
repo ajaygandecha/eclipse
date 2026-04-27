@@ -115,27 +115,34 @@ int main(int argc, char *argv[])
   }
   char code[8];
   int code_len = 0;
-  for (int i = 0; i < max_polls; i++)
   {
-    int __eclipse_gpio_value_0;
-    klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
-    int button = __eclipse_gpio_value_0;
-    int __eclipse_gpio_value_1;
-    klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
-    int armed = __eclipse_gpio_value_1;
-    if ((button < 0) || (armed < 0))
+    int __eclipse_loop_bound_0 = 0;
+    for (int i = 0; (i < max_polls) && (__eclipse_loop_bound_0 < 10); i++)
     {
-      perror("gpiod_line_request_get_value");
-      cleanup_request(request);
-      cleanup_config(line_cfg, settings, req_cfg, chip);
-      return 1;
+      int __eclipse_gpio_value_0;
+      klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
+      int button = __eclipse_gpio_value_0;
+      int __eclipse_gpio_value_1;
+      klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
+      int armed = __eclipse_gpio_value_1;
+      if ((button < 0) || (button > 1))
+      {
+        fprintf(stderr, "Invalid button value: %d\n", button);
+        return 1;
+      }
+      if ((armed < 0) || (armed > 1))
+      {
+        fprintf(stderr, "Invalid armed value: %d\n", armed);
+        return 1;
+      }
+      if ((button == 1) && (armed == 1))
+      {
+        code[code_len++] = digit;
+      }
+      __eclipse_loop_bound_0++;
     }
-    if ((button == 1) && (armed == 1))
-    {
-      code[code_len++] = digit;
-    }
-  }
 
+  }
   code[code_len] = '\0';
   printf("Collected code: %s\n", code);
   cleanup_request(request);

@@ -1,7 +1,7 @@
 program: irrigation-controller
 entry_point: main
 
-klee_posix_command: "--sym-args 2 2 2"
+klee_posix_command: "--sym-args 2 2 5"
 
 args:
   argv0: "irrigation-controller"
@@ -11,10 +11,10 @@ args:
       optional: false
       value_kind: int
       min: 1
-      max: 99
+      max: 99999
 
     - id: zone
       type: positional
       optional: false
       min_length: 1
-      max_length: 2
+      max_length: 5

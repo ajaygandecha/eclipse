@@ -2,7 +2,7 @@ program: repeat
 entry_point: main
 
 #klee_posix_command: "--sym-args 2 2 5"
-klee_posix_command: " --sym-arg 5 --sym-arg 4"
+klee_posix_command: " --sym-arg 5 --sym-arg 5"
 
 args:
   argv0: "repeat"
@@ -18,4 +18,4 @@ args:
       value_kind: int
       optional: false
       min: 1
-      max: 9999
+      max: 99999

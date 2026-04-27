@@ -218,6 +218,8 @@ def _find_function_like_start(source_text: str, line: int) -> int:
             break
         if previous_line.startswith(("//", "/*", "*", "#")):
             break
+        if "/*" in previous_line or "*/" in previous_line:
+            break
         if previous_line.endswith((";", "}", "{")):
             break
         start_line -= 1

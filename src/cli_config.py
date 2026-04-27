@@ -153,7 +153,16 @@ def _load_option_element(raw_element: dict[str, object]) -> OptionElement:
 def _load_positional_element(raw_element: dict[str, object]) -> PositionalElement:
     _reject_unknown_keys(
         raw_element,
-        {"id", "type", "optional", "value_kind", "min", "max", "min_length", "max_length"},
+        {
+            "id",
+            "type",
+            "optional",
+            "value_kind",
+            "min",
+            "max",
+            "min_length",
+            "max_length",
+        },
         "positional element",
     )
     element_id = _require_identifier(raw_element.get("id"), "positional id")
@@ -299,7 +308,7 @@ def _load_spellings(raw_spellings: object, element_id: str) -> tuple[str, ...]:
 
     spellings: list[str] = []
     for spelling in raw_spellings:
-        if not isinstance(spelling, str) or not spelling.startswith("-"):
+        if not isinstance(spelling, str):
             raise ValueError(
                 f"Option '{element_id}' spellings must be strings like '-n' or '--name'."
             )

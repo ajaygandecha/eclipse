@@ -1,7 +1,7 @@
 program: buggy
 entry_point: main
 
-klee_posix_command: "--sym-arg 2 --sym-arg 4"
+klee_posix_command: "--sym-arg 2 --sym-arg 5"
 
 args:
   argv0: "buggy"
@@ -15,4 +15,4 @@ args:
       type: positional
       optional: false
       min_length: 1
-      max_length: 4
+      max_length: 5

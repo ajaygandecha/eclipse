@@ -118,12 +118,7 @@ class LoopBoundsVisitor:
 
         rewritten_items = []
         for item in block_items:
-            if isinstance(item, (While, For)):
-                counter_decl, loop_node = self._visit_loop(item)
-                rewritten_items.append(counter_decl)
-                rewritten_items.append(loop_node)
-            else:
-                rewritten_items.append(self._visit_statement(item))
+            rewritten_items.append(self._visit_statement(item))
         return rewritten_items
 
     def _visit_statement(self, stmt: Optional[Node]) -> Optional[Node]:

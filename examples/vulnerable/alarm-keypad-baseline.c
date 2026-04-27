@@ -103,14 +103,21 @@ int main(int argc, char *argv[]) {
     int code_len = 0;
 
     for (int i = 0; i < max_polls; i++) {
-
         int __eclipse_gpio_value_0;
         klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
         int button = __eclipse_gpio_value_0;
         int __eclipse_gpio_value_1;
         klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
         int armed = __eclipse_gpio_value_1;
-
+  
+        if(button < 0 || button > 1) {
+            fprintf(stderr, "Invalid button value: %d\n", button);
+            return 1;
+        }
+        if(armed < 0 || armed > 1) {
+            fprintf(stderr, "Invalid armed value: %d\n", armed);
+            return 1;
+        }
 
         if (button == 1 && armed == 1) {
             code[code_len++] = digit;   /* Intentional memory safety bug */

@@ -28,19 +28,23 @@ int __eclipse_original_main(int argc, char *argv[])
     char buffer[4];
     int j = 0;
     size_t len = strlen(word);
-    int __eclipse_loop_bound_0 = 0;
-    for (int r = 0; (r < 3) && (__eclipse_loop_bound_0 < 10); r++)
     {
-      int __eclipse_loop_bound_1 = 0;
-      for (size_t i = 0; (i < len) && (__eclipse_loop_bound_1 < 10); i++)
+      int __eclipse_loop_bound_0 = 0;
+      for (int r = 0; (r < 3) && (__eclipse_loop_bound_0 < 10); r++)
       {
-        buffer[j++] = word[i];
-        __eclipse_loop_bound_1++;
+        {
+          int __eclipse_loop_bound_1 = 0;
+          for (size_t i = 0; (i < len) && (__eclipse_loop_bound_1 < 10); i++)
+          {
+            buffer[j++] = word[i];
+            __eclipse_loop_bound_1++;
+          }
+
+        }
+        __eclipse_loop_bound_0++;
       }
 
-      __eclipse_loop_bound_0++;
     }
-
     buffer[j] = '\0';
     printf("Copied string: %s\n", buffer);
   }
@@ -93,14 +97,15 @@ int main(void)
   klee_assume((__eclipse_mode_spelling >= 0) && (__eclipse_mode_spelling <= 2));
   int __eclipse_word_length;
   klee_make_symbolic(&__eclipse_word_length, sizeof(__eclipse_word_length), "word_length");
-  klee_assume((__eclipse_word_length >= 1) && (__eclipse_word_length <= 4));
-  char sym_word[5];
+  klee_assume((__eclipse_word_length >= 1) && (__eclipse_word_length <= 5));
+  char sym_word[6];
   klee_make_symbolic(sym_word, sizeof(sym_word), "word");
   klee_assume(sym_word[__eclipse_word_length] == '\0');
   klee_assume((__eclipse_word_length <= 0) || (sym_word[0] != '\0'));
   klee_assume((__eclipse_word_length <= 1) || (sym_word[1] != '\0'));
   klee_assume((__eclipse_word_length <= 2) || (sym_word[2] != '\0'));
   klee_assume((__eclipse_word_length <= 3) || (sym_word[3] != '\0'));
+  klee_assume((__eclipse_word_length <= 4) || (sym_word[4] != '\0'));
   if (__eclipse_mode_spelling == 0)
   {
     __eclipse_argv[__eclipse_argc] = "-c";

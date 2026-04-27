@@ -115,24 +115,26 @@ int __eclipse_original_main(int argc, char *argv[])
   }
   char code[8];
   int code_len = 0;
-  int __eclipse_loop_bound_0 = 0;
-  for (int i = 0; (i < max_polls) && (__eclipse_loop_bound_0 < 10); i++)
   {
-    int __eclipse_gpio_value_0;
-    klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
-    klee_assume((__eclipse_gpio_value_0 == 0) || (__eclipse_gpio_value_0 == 1));
-    int button = __eclipse_gpio_value_0;
-    int __eclipse_gpio_value_1;
-    klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
-    klee_assume((__eclipse_gpio_value_1 == 0) || (__eclipse_gpio_value_1 == 1));
-    int armed = __eclipse_gpio_value_1;
-    if ((button == 1) && (armed == 1))
+    int __eclipse_loop_bound_0 = 0;
+    for (int i = 0; (i < max_polls) && (__eclipse_loop_bound_0 < 10); i++)
     {
-      code[code_len++] = digit;
+      int __eclipse_gpio_value_0;
+      klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
+      klee_assume((__eclipse_gpio_value_0 == 0) || (__eclipse_gpio_value_0 == 1));
+      int button = __eclipse_gpio_value_0;
+      int __eclipse_gpio_value_1;
+      klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
+      klee_assume((__eclipse_gpio_value_1 == 0) || (__eclipse_gpio_value_1 == 1));
+      int armed = __eclipse_gpio_value_1;
+      if ((button == 1) && (armed == 1))
+      {
+        code[code_len++] = digit;
+      }
+      __eclipse_loop_bound_0++;
     }
-    __eclipse_loop_bound_0++;
-  }
 
+  }
   code[code_len] = '\0';
   printf("Collected code: %s\n", code);
   cleanup_request(request);
@@ -147,12 +149,12 @@ int main(void)
   __eclipse_argv[0] = "alarm-keypad";
   int sym_max_polls;
   klee_make_symbolic(&sym_max_polls, sizeof(sym_max_polls), "max_polls");
-  klee_assume((sym_max_polls >= 1) && (sym_max_polls <= 99));
-  char __eclipse_max_polls_value[3];
+  klee_assume((sym_max_polls >= 1) && (sym_max_polls <= 99999));
+  char __eclipse_max_polls_value[6];
   int sym_digit;
   klee_make_symbolic(&sym_digit, sizeof(sym_digit), "digit");
-  klee_assume((sym_digit >= 1) && (sym_digit <= 9));
-  char __eclipse_digit_value[2];
+  klee_assume((sym_digit >= 1) && (sym_digit <= 99999));
+  char __eclipse_digit_value[6];
   __eclipse_argv[__eclipse_argc] = __eclipse_int_to_string(sym_max_polls, __eclipse_max_polls_value, sizeof(__eclipse_max_polls_value));
   __eclipse_argc++;
   __eclipse_argv[__eclipse_argc] = __eclipse_int_to_string(sym_digit, __eclipse_digit_value, sizeof(__eclipse_digit_value));

@@ -148,64 +148,66 @@ int main(int argc, char *argv[])
     return 1;
   }
   int protocol_state = 0;
-  int __eclipse_loop_bound_0 = 0;
-  for (int i = 0; (i < cycles) && (__eclipse_loop_bound_0 < 10); i++)
   {
-    int __eclipse_gpio_value_0;
-    klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
-    int moisture = __eclipse_gpio_value_0;
-    int __eclipse_gpio_value_1;
-    klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
-    int override = __eclipse_gpio_value_1;
-    int __eclipse_gpio_value_2;
-    klee_make_symbolic(&__eclipse_gpio_value_2, sizeof(__eclipse_gpio_value_2), "__eclipse_gpio_value_2");
-    int tankempty = __eclipse_gpio_value_2;
-    if (((moisture < 0) || (override < 0)) || (tankempty < 0))
+    int __eclipse_loop_bound_0 = 0;
+    for (int i = 0; (i < cycles) && (__eclipse_loop_bound_0 < 10); i++)
     {
-      perror("gpiod_line_request_get_value");
-      cleanup_request(request);
-      cleanup_config(line_cfg, settings, req_cfg, chip);
-      return 1;
+      int __eclipse_gpio_value_0;
+      klee_make_symbolic(&__eclipse_gpio_value_0, sizeof(__eclipse_gpio_value_0), "__eclipse_gpio_value_0");
+      int moisture = __eclipse_gpio_value_0;
+      int __eclipse_gpio_value_1;
+      klee_make_symbolic(&__eclipse_gpio_value_1, sizeof(__eclipse_gpio_value_1), "__eclipse_gpio_value_1");
+      int override = __eclipse_gpio_value_1;
+      int __eclipse_gpio_value_2;
+      klee_make_symbolic(&__eclipse_gpio_value_2, sizeof(__eclipse_gpio_value_2), "__eclipse_gpio_value_2");
+      int tankempty = __eclipse_gpio_value_2;
+      if (((moisture < 0) || (override < 0)) || (tankempty < 0))
+      {
+        perror("gpiod_line_request_get_value");
+        cleanup_request(request);
+        cleanup_config(line_cfg, settings, req_cfg, chip);
+        return 1;
+      }
+      if ((((protocol_state == 0) && (moisture == 0)) && (override == 0)) && (tankempty == 0))
+      {
+        protocol_state = 1;
+      }
+      else
+        if ((((protocol_state == 1) && (moisture == 1)) && (override == 0)) && (tankempty == 0))
+      {
+        protocol_state = 2;
+      }
+      else
+        if ((((protocol_state == 2) && (moisture == 0)) && (override == 1)) && (tankempty == 0))
+      {
+        protocol_state = 3;
+      }
+      else
+        if ((((protocol_state == 3) && (moisture == 1)) && (override == 1)) && (tankempty == 0))
+      {
+        protocol_state = 4;
+      }
+      else
+        if ((((protocol_state == 4) && (moisture == 0)) && (override == 1)) && (tankempty == 1))
+      {
+        char event[8];
+        event[0] = '\0';
+        strcpy(event, "ZONE:");
+        strcat(event, zone);
+        strcat(event, ":OPEN");
+        printf("Maintenance event for %s\n", event);
+        cleanup_request(request);
+        cleanup_config(line_cfg, settings, req_cfg, chip);
+        return 0;
+      }
+      else
+      {
+        protocol_state = 0;
+      }
+      __eclipse_loop_bound_0++;
     }
-    if ((((protocol_state == 0) && (moisture == 0)) && (override == 0)) && (tankempty == 0))
-    {
-      protocol_state = 1;
-    }
-    else
-      if ((((protocol_state == 1) && (moisture == 1)) && (override == 0)) && (tankempty == 0))
-    {
-      protocol_state = 2;
-    }
-    else
-      if ((((protocol_state == 2) && (moisture == 0)) && (override == 1)) && (tankempty == 0))
-    {
-      protocol_state = 3;
-    }
-    else
-      if ((((protocol_state == 3) && (moisture == 1)) && (override == 1)) && (tankempty == 0))
-    {
-      protocol_state = 4;
-    }
-    else
-      if ((((protocol_state == 4) && (moisture == 0)) && (override == 1)) && (tankempty == 1))
-    {
-      char event[8];
-      event[0] = '\0';
-      strcpy(event, "ZONE:");
-      strcat(event, zone);
-      strcat(event, ":OPEN");
-      printf("Maintenance event for %s\n", event);
-      cleanup_request(request);
-      cleanup_config(line_cfg, settings, req_cfg, chip);
-      return 0;
-    }
-    else
-    {
-      protocol_state = 0;
-    }
-    __eclipse_loop_bound_0++;
-  }
 
+  }
   printf("No maintenance action for zone %s\n", zone);
   cleanup_request(request);
   cleanup_config(line_cfg, settings, req_cfg, chip);

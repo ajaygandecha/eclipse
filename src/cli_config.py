@@ -58,7 +58,7 @@ _LEGACY_KEYS = {"options", "positionals"}
 
 
 def load_cli_config(config_path: str | Path) -> CLIProgramSpec:
-    """Load and validate the canonical CLI YAML specification."""
+    """Load and validate the CLI YAML specification."""
 
     path = Path(config_path)
     raw_config = yaml.safe_load(path.read_text()) or {}

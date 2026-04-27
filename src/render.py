@@ -4,6 +4,7 @@ from pathlib import Path
 from pycparser import c_generator
 from pycparser.c_ast import Decl, FileAST, FuncDecl, FuncDef, Node
 
+# List of KLEE declarations that are needed for the generated code (from KLEE's source code)
 _KLEE_DECLARATIONS = (
     (
         "snprintf",
@@ -16,6 +17,7 @@ _KLEE_DECLARATIONS = (
     ("klee_assume", "extern void klee_assume(int condition);"),
     ("klee_assert", "extern void klee_assert(int condition);"),
 )
+# Helper function to convert an integer to a string
 _KLEE_HELPERS = """static char *__eclipse_int_to_string(int value, char *buffer, int buffer_size)
 {
   snprintf(buffer, buffer_size, "%d", value);
@@ -167,10 +169,13 @@ def _function_like_span(source_text: str, node: FuncDef | Decl) -> _SourceSpan:
 
     start = _find_function_like_start(source_text, coord.line)
     if isinstance(node, FuncDef):
-        end = _find_matching_brace(
-            source_text,
-            _find_block_start(source_text, start),
-        ) + 1
+        end = (
+            _find_matching_brace(
+                source_text,
+                _find_block_start(source_text, start),
+            )
+            + 1
+        )
         return _SourceSpan(start=start, end=end)
 
     end = _find_declaration_terminator(source_text, start) + 1

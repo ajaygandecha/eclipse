@@ -49,11 +49,10 @@ class GuidanceMetadata:
 class _FunctionRiskVisitor(NodeVisitor):
     """Collect lightweight "risk" notes while walking a single function body.
 
-    This visitor is intentionally heuristic-driven rather than exhaustive. The
-    goal is not to prove that a function is unsafe. The goal is to identify
-    functions that look more interesting than average for symbolic exploration,
-    for example because they perform pointer arithmetic, write through derived
-    pointers, or call string/memory APIs that are commonly involved in bugs.
+    The goal is to identify functions that look more interesting than average for
+    symbolic exploration, for example because they perform pointer arithmetic, write
+    through derived pointers, or call string/memory APIs that are commonly involved
+    in bugs.
     """
 
     def __init__(self) -> None:

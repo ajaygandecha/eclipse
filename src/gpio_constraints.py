@@ -33,8 +33,10 @@ from pycparser.c_ast import (
     While,
 )
 
+# List of GPIO read functions that are supported by the visitor (using libgpiod for now)
 GPIO_READ_FUNCTIONS = {"gpiod_line_get_value", "gpiod_line_request_get_value"}
 
+# List of expression statement types that are supported by the visitor
 EXPRESSION_STATEMENT_TYPES = (
     ArrayRef,
     Assignment,
@@ -191,7 +193,9 @@ class GPIOConstraintVisitor:
             rewritten_items.extend(self._rewrite_statement(item))
         return rewritten_items
 
-    def _rewrite_for_init(self, init: Optional[Node]) -> tuple[list[Node], Optional[Node]]:
+    def _rewrite_for_init(
+        self, init: Optional[Node]
+    ) -> tuple[list[Node], Optional[Node]]:
         if init is None:
             return [], init
 
@@ -204,7 +208,9 @@ class GPIOConstraintVisitor:
 
         return self._rewrite_expression(init)
 
-    def _rewrite_expression(self, expr: Optional[Node]) -> tuple[list[Node], Optional[Node]]:
+    def _rewrite_expression(
+        self, expr: Optional[Node]
+    ) -> tuple[list[Node], Optional[Node]]:
         """Rewrite an expression and return `(prefix_statements, rewritten_expr)`.
 
         This is the core mechanism of the visitor. Expression nodes are walked
@@ -356,7 +362,9 @@ class GPIOConstraintVisitor:
     def _make_break_if_false(self, condition: Node) -> If:
         return If(cond=UnaryOp(op="!", expr=condition), iftrue=Break(), iffalse=None)
 
-    def _inject_before_continue(self, stmt: Optional[Node], tail_nodes: list[Node]) -> Optional[Node]:
+    def _inject_before_continue(
+        self, stmt: Optional[Node], tail_nodes: list[Node]
+    ) -> Optional[Node]:
         if stmt is None or not tail_nodes:
             return stmt
 
@@ -383,7 +391,9 @@ class GPIOConstraintVisitor:
             return stmt
 
         if isinstance(stmt, (Case, Default)):
-            stmt.stmts = self._inject_tail_before_continue_in_block(stmt.stmts, tail_nodes)
+            stmt.stmts = self._inject_tail_before_continue_in_block(
+                stmt.stmts, tail_nodes
+            )
             return stmt
 
         if isinstance(stmt, (While, For)):

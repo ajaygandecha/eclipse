@@ -4,7 +4,7 @@
 
 At a high level, ECLIPSE operates as a pipeline-style program which is the target CLI utility to analyze, and (2) a YAML-based CLI specification file. The CLI specification file describes the structure of valid input to the target C program and its constraints, such as supported flags and options, data types, and valid values (e.g., enumerations or bounds on integer ranges or string lengths). The program is first transformed by a custom preprocessor to constrain inputs, model hardware interactions, and bound potential sources of path explosion. ECLIPSE then compiles the transformed program into LLVM bitcode using Clang and performs symbolic execution us- ing KLEE with a guided search strategy. Finally, ECLIPSE produces a report describing discovered vulnerabilities along with concrete inputs that reproduce them. An overview of ECLIPSE’s workflow is shown in Figure 1. ECLIPSE and most of its functionality is written in Python.
 
-To learn more about ECLIPSE, read our paper [here]().
+To learn more about ECLIPSE, read our paper [here](https://github.com/ajaygandecha/eclipse/blob/main/PAPER.pdf).
 
 ## Structure
 
@@ -26,15 +26,15 @@ FILE TREE HERE
 
 ## Setup
 
-To use ECLIPSE, first clone the repository and open the project in VS Code. The project has a pre-configured Docker DevContainer. Ensure that you have both [Docker Desktop]() and the [DevContainer extension]() installed, then open the project and select the "Reopen in DevContainer" option.
+To use ECLIPSE, first clone the repository and open the project in VS Code. The project has a pre-configured Docker DevContainer. Ensure that you have both [Docker Desktop](https://www.docker.com/products/docker-desktop/) and the [DevContainer extension](https://code.visualstudio.com/docs/devcontainers/containers) installed, then open the project and select the "Reopen in DevContainer" option.
 
-From there, ECLIPSE will begin setting up. This may take a while. The DevContainer should run the `post-create.sh` script, which should set up the CoreUtils project as well for testing purposes. This script also runs the `apply-guided-klee.sh` script, which applies a [patch file]() to KLEE's internal installation so that it can support guided symbolic execution. From there, try running your first test on `buggy.c` below!
+From there, ECLIPSE will begin setting up. This may take a while. The DevContainer should run the `post-create.sh` script, which should set up the CoreUtils project as well for testing purposes. This script also runs the `apply-guided-klee.sh` script, which applies a [patch file](https://github.com/ajaygandecha/eclipse/blob/main/.devcontainer/klee-guided-search.patch) to KLEE's internal installation so that it can support guided symbolic execution. From there, try running your first test on `buggy.c` below!
 
 ## Example Workflow
 
-To show how ECLIPSE can be used to find memory safety violation in a C utility program, we walk through a detailed example of the workflow running ECLIPSE on an example program - in this case, [`buggy.c`](). 
+To show how ECLIPSE can be used to find memory safety violation in a C utility program, we walk through a detailed example of the workflow running ECLIPSE on an example program - in this case, [`buggy.c`](https://github.com/ajaygandecha/eclipse/blob/main/examples/vulnerable/buggy.c). 
 
-Recall that ECLIPSE requires two input programs - (1) C file to test and (2) the CLI specification for the program. Here, we created [`buggy.yml`]() to provide the CLI specification.
+Recall that ECLIPSE requires two input programs - (1) C file to test and (2) the CLI specification for the program. Here, we created [`buggy.yml`](https://github.com/ajaygandecha/eclipse/blob/main/examples/vulnerable/buggy.yml) to provide the CLI specification.
 
 To run ECLIPSE on this program, we use the command:
 
@@ -42,9 +42,9 @@ To run ECLIPSE on this program, we use the command:
 eclipse examples/vulnerable/buggy.c --cli-config examples/vulnerable/buggy.yml
 ```
 
-Upon running this command, ECLIPSE is going to create and output two files: (1) a [`buggy-processed.c`]() file that contains the output of ECLIPSE's preprocessing transformations on the orignal C file, and a [`buggy-guidance.json`]() which specifies potential "high-risk" functions to guide symbolic execution.
+Upon running this command, ECLIPSE is going to create and output two files: (1) a [`buggy-processed.c`](https://github.com/ajaygandecha/eclipse/blob/main/examples/vulnerable/buggy-processed.c) file that contains the output of ECLIPSE's preprocessing transformations on the orignal C file, and a [`buggy-guidance.json`](https://github.com/ajaygandecha/eclipse/blob/main/examples/vulnerable/buggy-guidance.json) which specifies potential "high-risk" functions to guide symbolic execution.
 
-Once these files are created, ECLIPSE will compile the program and create a [`compiled-input.bc`]() LLVM bitcode file. This file is then symbolically executed. You will see a lot of output, some of which may look incomprehensible - this is just output while KLEE is symbolically executing. You should however, see the following lines:
+Once these files are created, ECLIPSE will compile the program and create a `compiled-input.bc` LLVM bitcode file. This file is then symbolically executed. You will see a lot of output, some of which may look incomprehensible - this is just output while KLEE is symbolically executing. You should however, see the following lines:
 
 ```
 KLEE: ERROR: examples/vulnerable/buggy-processed.c:57: memory error: object read only

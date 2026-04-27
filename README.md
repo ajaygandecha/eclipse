@@ -12,10 +12,6 @@ To learn more about ECLIPSE, read our paper [here](https://github.com/ajaygandec
 
 The structure of the repository is as follows:
 
-```
-FILE TREE HERE
-```
-
 - **`src`**: The source folder contains all of ECLIPSE's source code, including the entrypoint for ECLIPSE and for the preprocessor.
     - `main.py`: The entrypoint for ECLIPSE.
     - `preprocessor.py`: The core preprocessor functionality, which includes parsing the input C program into an AST and applying ECLIPSE's optimizations. These optimizations are separated into different files for better readability.

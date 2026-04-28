@@ -1,9 +1,24 @@
 from __future__ import annotations
 
 from pycparser import c_parser
-from pycparser.c_ast import ArrayDecl, Decl, FileAST, FuncDecl, FuncDef, IdentifierType, PtrDecl, TypeDecl
+from pycparser.c_ast import (
+    ArrayDecl,
+    Decl,
+    FileAST,
+    FuncDecl,
+    FuncDef,
+    IdentifierType,
+    PtrDecl,
+    TypeDecl,
+)
 
-from cli_config import CLIProgramSpec, OptionElement, OptionValueElement, PositionalElement, load_cli_config
+from cli_config import (
+    CLIProgramSpec,
+    OptionElement,
+    OptionValueElement,
+    PositionalElement,
+    load_cli_config,
+)
 
 HARNESS_MAIN_NAME = "main"
 ORIGINAL_MAIN_NAME = "__eclipse_original_main"
@@ -51,7 +66,7 @@ class ArgumentConstraintVisitor:
 
     The resulting program keeps the original logic intact, but routes execution
     through a harness that constructs symbolic `argc`/`argv` according to the
-    declarative YAML CLI specification.
+    YAML CLI specification.
     """
 
     def __init__(self, spec: CLIProgramSpec):

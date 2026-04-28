@@ -1,3 +1,5 @@
+"""The renderer converts an AST back to C code to be compiled by Clang."""
+
 from dataclasses import dataclass
 from pathlib import Path
 

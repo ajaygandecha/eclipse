@@ -34,8 +34,7 @@ class LoopBoundsVisitor:
     - an additional `counter < max_iterations` guard in the loop condition
     - a counter increment at the end of the loop body
 
-    This keeps the transformed program structurally close to the original one
-    while ensuring symbolic execution does not wander into unbounded iteration.
+    This keeps the transformed program structurally close to the original one.
     """
 
     def __init__(self, max_iterations: int = MAX_ITERATIONS):
@@ -86,7 +85,9 @@ class LoopBoundsVisitor:
             return stmt
         return Compound(block_items=[stmt] if stmt is not None else [])
 
-    def _rewrite_loop_condition(self, loop_node: While | For, counter_name: str) -> None:
+    def _rewrite_loop_condition(
+        self, loop_node: While | For, counter_name: str
+    ) -> None:
         bound_expr = self._make_bound_expr(counter_name)
         if isinstance(loop_node, While):
             loop_node.cond = BinaryOp(op="&&", left=loop_node.cond, right=bound_expr)

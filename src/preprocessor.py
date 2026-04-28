@@ -1,3 +1,5 @@
+"""Preprocessor workflow for ECLIPSE."""
+
 from pathlib import Path
 
 from pycparser import parse_file
@@ -22,6 +24,9 @@ _COREUTILS_CPP_INCLUDES = (
     _COREUTILS_GNULIB_LIB,
     _COREUTILS_GL_LIB,
 )
+
+# This fix was suggested by Codex for a strange error with a specific program due to
+# specific configuration mismatches between the build environment and the host.
 _COREUTILS_CPP_PLATFORM_FIXES = (
     # Coreutils preprocessing uses vendored headers plus `-nostdinc`, so if the
     # host compiler advertises macOS predefined macros, gnulib wrappers can take
@@ -31,9 +36,9 @@ _COREUTILS_CPP_PLATFORM_FIXES = (
     "-U__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
     "-UMAC_OS_X_VERSION_MIN_REQUIRED",
 )
-_STANDALONE_CPP_INCLUDES = (
-    _FAKE_LIBC_INCLUDE,
-)
+
+# Include the fake libc headers for the standalone input case.
+_STANDALONE_CPP_INCLUDES = (_FAKE_LIBC_INCLUDE,)
 
 # Define the necessary Clang preprocessing flags for the AST to be parsed correctly.
 # NOTE: Some of the flags added here are a response to running ECLIPSE on different

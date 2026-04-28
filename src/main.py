@@ -1,10 +1,4 @@
-"""Compile C inputs to LLVM bitcode and run them under KLEE.
-
-Most inputs can be compiled as a single translation unit with clang. Coreutils
-is the main exception: utilities such as `cut` depend on a large set of
-generated headers and support libraries, so KLEE must be given linked,
-whole-program bitcode instead of a single `cut.c` object file.
-"""
+"""Main entrypoint that runs the entire ECLIPSE workflow."""
 
 import argparse
 import time
